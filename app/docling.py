@@ -46,11 +46,26 @@ class DoclingService:
         """Lädt die Docling-Pipeline."""
         try:
             from docling.document_converter import DocumentConverter
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
             
             logger.info("Initialisiere Docling-Pipeline...")
             
-            # Pipeline erstellen (ohne spezifische Konfiguration, verwendet Standardeinstellungen)
-            self.pipeline = DocumentConverter()
+            # Pipeline-Optionen konfigurieren, um Bilder zu extrahieren
+            try:
+                # Versuche, Pipeline-Optionen zu konfigurieren
+                pipeline_options = PdfPipelineOptions()
+                # Stelle sicher, dass Bilder extrahiert werden
+                if hasattr(pipeline_options, 'do_ocr'):
+                    pipeline_options.do_ocr = True
+                if hasattr(pipeline_options, 'do_table_structure'):
+                    pipeline_options.do_table_structure = True
+                
+                self.pipeline = DocumentConverter(pipeline_options=pipeline_options)
+                logger.info("Docling-Pipeline mit erweiterten Optionen initialisiert")
+            except Exception as config_error:
+                logger.debug(f"Konfiguration mit Pipeline-Optionen fehlgeschlagen, verwende Standard: {str(config_error)}")
+                # Fallback: Standard-Pipeline ohne spezielle Konfiguration
+                self.pipeline = DocumentConverter()
             
             self._initialized = True
             logger.info("Docling-Pipeline erfolgreich initialisiert")
