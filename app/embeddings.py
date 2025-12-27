@@ -81,7 +81,9 @@ class EmbeddingsService:
         Args:
             model_name: Name des Modells (optional, Standard: bge-base)
         """
-        self.model_name = resolve_embedding_model_name(model_name)
+        resolved = resolve_embedding_model_name(model_name)
+        logger.debug(f"Embedding-Modell aufgelöst: {model_name} -> {resolved}")
+        self.model_name = resolved
         self.model: Optional[SentenceTransformer] = None
         self.executor = ThreadPoolExecutor(max_workers=2)
         self._loaded = False
@@ -186,14 +188,18 @@ class EmbeddingsService:
         
         # Führe Embedding in Thread-Pool aus (nicht-blockierend)
         loop = asyncio.get_event_loop()
+        
+        # Wrapper-Funktion für encode mit Parametern
+        def encode_with_params():
+            return model_to_use.encode(
+                texts,
+                normalize_embeddings=True,  # Normalisiert für bessere Vergleichbarkeit
+                show_progress_bar=False
+            )
+        
         embeddings = await loop.run_in_executor(
             self.executor,
-            model_to_use.encode,
-            texts,
-            {
-                "normalize_embeddings": True,  # Normalisiert für bessere Vergleichbarkeit
-                "show_progress_bar": False
-            }
+            encode_with_params
         )
         
         # Konvertiere numpy array zu Liste von Listen
