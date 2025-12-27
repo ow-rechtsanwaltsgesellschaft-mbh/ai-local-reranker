@@ -94,38 +94,92 @@ class DoclingService:
         
         def convert():
             try:
+                import time
+                start_time = time.time()
+                
                 # Dokument konvertieren
                 result = self.pipeline.convert(file_path)
                 
-                # Format-spezifische Ausgabe
-                if output_format.lower() == "markdown":
-                    content = result.document.export_to_markdown()
-                elif output_format.lower() == "json":
-                    content = result.document.export_to_dict()
-                elif output_format.lower() == "text":
-                    content = result.document.export_to_text()
-                else:
-                    content = result.document.export_to_markdown()
+                processing_time = time.time() - start_time
                 
-                # Metadaten extrahieren
-                metadata = {
-                    "file_path": file_path,
-                    "format": output_format,
-                    "pages": len(result.document.pages) if hasattr(result.document, 'pages') else None,
-                    "tables": len(result.document.tables) if hasattr(result.document, 'tables') else 0,
-                }
+                # Seiteninformationen im Mistral OCR Format extrahieren
+                pages_data = []
+                if hasattr(result.document, 'pages') and result.document.pages:
+                    for i, page in enumerate(result.document.pages):
+                        # Markdown-Inhalt der Seite extrahieren
+                        page_markdown = ""
+                        try:
+                            if hasattr(page, 'export_to_markdown'):
+                                page_markdown = page.export_to_markdown()
+                            elif hasattr(page, 'text'):
+                                page_markdown = page.text
+                            else:
+                                page_markdown = str(page)
+                        except Exception as e:
+                            logger.warning(f"Fehler beim Extrahieren von Markdown für Seite {i}: {str(e)}")
+                            page_markdown = ""
+                        
+                        # Dimensions-Informationen (falls verfügbar)
+                        dimensions = None
+                        if hasattr(page, 'bbox') and page.bbox:
+                            bbox = page.bbox
+                            if len(bbox) >= 4:
+                                width = bbox[2] - bbox[0] if bbox[2] > bbox[0] else None
+                                height = bbox[3] - bbox[1] if bbox[3] > bbox[1] else None
+                                if width and height:
+                                    dimensions = {
+                                        "dpi": 200,  # Standard-DPI, kann aus Metadaten extrahiert werden
+                                        "height": int(height),
+                                        "width": int(width)
+                                    }
+                        
+                        # Bilder extrahieren (falls verfügbar)
+                        images = []
+                        if hasattr(page, 'images') and page.images:
+                            for img in page.images:
+                                img_data = {}
+                                if hasattr(img, 'bbox'):
+                                    img_data["bbox"] = list(img.bbox) if img.bbox else []
+                                # Base64-Kodierung würde hier implementiert werden, falls Bilder verfügbar sind
+                                images.append(img_data)
+                        
+                        page_info = {
+                            "index": i,
+                            "markdown": page_markdown,
+                            "dimensions": dimensions,
+                            "images": images
+                        }
+                        pages_data.append(page_info)
+                else:
+                    # Falls keine Seiteninformationen verfügbar, gesamtes Dokument als eine Seite
+                    try:
+                        full_markdown = result.document.export_to_markdown()
+                        pages_data.append({
+                            "index": 0,
+                            "markdown": full_markdown,
+                            "dimensions": None,
+                            "images": []
+                        })
+                    except Exception as e:
+                        logger.warning(f"Fehler beim Extrahieren des gesamten Dokuments: {str(e)}")
+                        pages_data.append({
+                            "index": 0,
+                            "markdown": "",
+                            "dimensions": None,
+                            "images": []
+                        })
                 
                 return {
-                    "content": content,
-                    "metadata": metadata,
+                    "pages": pages_data,
                     "success": True
                 }
                 
             except Exception as e:
                 logger.error(f"Fehler beim Konvertieren des Dokuments: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
                 return {
-                    "content": None,
-                    "metadata": {"file_path": file_path},
+                    "pages": [],
                     "success": False,
                     "error": str(e)
                 }

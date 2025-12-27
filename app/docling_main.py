@@ -33,12 +33,17 @@ class ConvertRequest(BaseModel):
     filename: Optional[str] = Field(None, description="Dateiname (für Format-Erkennung bei file_bytes)")
 
 
+class PageData(BaseModel):
+    """Seiten-Daten im Mistral OCR Format."""
+    index: int
+    markdown: str
+    dimensions: Optional[dict] = None
+    images: List[dict] = Field(default_factory=list)
+
+
 class ConvertResponse(BaseModel):
-    """Response-Modell für Dokumentenkonvertierung."""
-    success: bool
-    content: Optional[str] = None
-    metadata: dict
-    error: Optional[str] = None
+    """Response-Modell für Dokumentenkonvertierung (Mistral OCR Format)."""
+    pages: List[PageData]
 
 
 # ===== Startup/Shutdown Events =====
@@ -121,19 +126,12 @@ async def convert_document(
                 detail=f"Fehler beim Konvertieren: {result.get('error', 'Unbekannter Fehler')}"
             )
         
-        # Content formatieren
-        content = result.get("content")
-        if output_format.lower() == "json" and isinstance(content, dict):
-            # JSON als String zurückgeben
-            import json
-            content = json.dumps(content, ensure_ascii=False, indent=2)
+        # Response im Mistral OCR Format zurückgeben
+        pages_data = []
+        for page_dict in result.get("pages", []):
+            pages_data.append(PageData(**page_dict))
         
-        return ConvertResponse(
-            success=True,
-            content=content,
-            metadata=result.get("metadata", {}),
-            error=None
-        )
+        return ConvertResponse(pages=pages_data)
     
     except HTTPException:
         raise
@@ -181,19 +179,12 @@ async def convert_document_from_path(
                 detail=f"Fehler beim Konvertieren: {result.get('error', 'Unbekannter Fehler')}"
             )
         
-        # Content formatieren
-        content = result.get("content")
-        if request.output_format.lower() == "json" and isinstance(content, dict):
-            # JSON als String zurückgeben
-            import json
-            content = json.dumps(content, ensure_ascii=False, indent=2)
+        # Response im Mistral OCR Format zurückgeben
+        pages_data = []
+        for page_dict in result.get("pages", []):
+            pages_data.append(PageData(**page_dict))
         
-        return ConvertResponse(
-            success=True,
-            content=content,
-            metadata=result.get("metadata", {}),
-            error=None
-        )
+        return ConvertResponse(pages=pages_data)
     
     except HTTPException:
         raise
