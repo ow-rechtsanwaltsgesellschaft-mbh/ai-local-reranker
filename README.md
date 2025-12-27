@@ -304,10 +304,10 @@ RERANKER_MODEL=cross-encoder/stsb-roberta-base docker-compose up
 ├── requirements.txt
 ├── runpod_template.json  # RunPod Template-Konfiguration (Legacy)
 ├── RUNPOD_DEPLOYMENT.md  # RunPod Deployment-Anleitung
+├── handler.py           # RunPod Serverless Handler (im Arbeitsverzeichnis)
 ├── .runpod/
 │   ├── hub.json         # RunPod Hub-Konfiguration
 │   ├── tests.json       # RunPod Test-Konfiguration
-│   ├── handler.py       # RunPod Serverless Handler
 │   └── start.sh         # Start-Script für RunPod
 └── README.md
 ```
