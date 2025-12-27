@@ -52,18 +52,24 @@ class DoclingService:
             
             # Pipeline-Optionen konfigurieren, um Bilder zu extrahieren
             try:
-                # Versuche, Pipeline-Optionen zu konfigurieren
-                pipeline_options = PdfPipelineOptions()
-                # Stelle sicher, dass Bilder extrahiert werden
-                if hasattr(pipeline_options, 'do_ocr'):
-                    pipeline_options.do_ocr = True
-                if hasattr(pipeline_options, 'do_table_structure'):
-                    pipeline_options.do_table_structure = True
+                from docling.datamodel.base_models import InputFormat
+                from docling.datamodel.pipeline_options import PdfFormatOption
                 
-                self.pipeline = DocumentConverter(pipeline_options=pipeline_options)
-                logger.info("Docling-Pipeline mit erweiterten Optionen initialisiert")
+                # WICHTIG: Bilder müssen explizit generiert werden (wie im Beispiel)
+                pipeline_options = PdfPipelineOptions()
+                pipeline_options.images_scale = 2.0  # Höhere Auflösung für Bilder
+                pipeline_options.generate_page_images = True  # Seitenbilder generieren
+                pipeline_options.generate_picture_images = True  # Bild-Elemente generieren
+                
+                # Erstelle DocumentConverter mit konfigurierten Optionen (wie im Beispiel)
+                self.pipeline = DocumentConverter(
+                    format_options={
+                        InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+                    }
+                )
+                logger.info("Docling-Pipeline mit Bild-Generierung konfiguriert")
             except Exception as config_error:
-                logger.debug(f"Konfiguration mit Pipeline-Optionen fehlgeschlagen, verwende Standard: {str(config_error)}")
+                logger.warning(f"Konfiguration mit Bild-Optionen fehlgeschlagen, verwende Standard: {str(config_error)}")
                 # Fallback: Standard-Pipeline ohne spezielle Konfiguration
                 self.pipeline = DocumentConverter()
             
@@ -286,6 +292,17 @@ class DoclingService:
                                         "width": int(width)
                                     }
                         
+                        # Seitenbild extrahieren (falls verfügbar und include_images_base64 aktiviert)
+                        # Seiten haben ein image-Attribut mit pil_image (wie im Beispiel)
+                        page_image = None
+                        if include_images_base64 and hasattr(page, 'image') and page.image:
+                            if hasattr(page.image, 'pil_image') and page.image.pil_image:
+                                try:
+                                    page_image = page.image.pil_image
+                                    logger.info(f"Seite {i} - Seitenbild gefunden: {type(page_image)}")
+                                except Exception as e:
+                                    logger.debug(f"Seite {i} - Fehler beim Zugriff auf page.image.pil_image: {str(e)}")
+                        
                         # Bilder extrahieren (falls verfügbar)
                         images = []
                         try:
@@ -451,16 +468,28 @@ class DoclingService:
                                         # Versuche verschiedene Wege, das Bild zu extrahieren
                                         image_data = None
                                         
-                                        # 1. get_image() Methode (PictureItem hat diese)
+                                        # 1. get_image(document) Methode (PictureItem hat diese)
+                                        # WICHTIG: get_image() benötigt das document-Objekt als Parameter!
                                         if hasattr(img, 'get_image') and callable(img.get_image):
                                             try:
-                                                image_data = img.get_image()
+                                                # Versuche mit document-Parameter
+                                                image_data = img.get_image(result.document)
                                                 if image_data is not None:
-                                                    logger.info(f"Bild über get_image() extrahiert: {type(image_data)}")
+                                                    logger.info(f"Bild über get_image(document) extrahiert: {type(image_data)}")
                                                 else:
-                                                    logger.debug(f"get_image() gab None zurück")
+                                                    logger.debug(f"get_image(document) gab None zurück")
+                                            except TypeError:
+                                                # Falls get_image() keinen Parameter benötigt
+                                                try:
+                                                    image_data = img.get_image()
+                                                    if image_data is not None:
+                                                        logger.info(f"Bild über get_image() extrahiert: {type(image_data)}")
+                                                    else:
+                                                        logger.debug(f"get_image() gab None zurück")
+                                                except Exception as e:
+                                                    logger.debug(f"get_image() fehlgeschlagen: {str(e)}")
                                             except Exception as e:
-                                                logger.debug(f"get_image() fehlgeschlagen: {str(e)}")
+                                                logger.debug(f"get_image(document) fehlgeschlagen: {str(e)}")
                                         
                                         # 2. Direktes image Attribut
                                         if image_data is None and hasattr(img, 'image') and img.image:
@@ -614,6 +643,31 @@ class DoclingService:
                                     tables.append(table_data)
                         except Exception as e:
                             logger.warning(f"Fehler beim Extrahieren der Tabellen: {str(e)}")
+                        
+                        # Seitenbild als Base64 kodieren (falls vorhanden)
+                        if include_images_base64 and page_image:
+                            try:
+                                import base64
+                                from io import BytesIO
+                                from PIL import Image
+                                buffered = BytesIO()
+                                # Konvertiere zu RGB falls nötig
+                                if page_image.mode in ('RGBA', 'LA', 'P'):
+                                    rgb_image = Image.new('RGB', page_image.size, (255, 255, 255))
+                                    if page_image.mode == 'P':
+                                        page_image = page_image.convert('RGBA')
+                                    rgb_image.paste(page_image, mask=page_image.split()[-1] if page_image.mode == 'RGBA' else None)
+                                    page_image = rgb_image
+                                page_image.save(buffered, format="PNG")
+                                page_image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                                # Füge Seitenbild als erstes Bild hinzu
+                                images.insert(0, {
+                                    "base64": page_image_base64,
+                                    "bbox": None  # Seitenbild hat keine BBox
+                                })
+                                logger.info(f"Seite {i} - Seitenbild als Base64 kodiert ({len(page_image_base64)} Zeichen)")
+                            except Exception as e:
+                                logger.warning(f"Seite {i} - Fehler beim Base64-Kodieren des Seitenbilds: {str(e)}")
                         
                         page_info = {
                             "index": idx,  # Verwende idx statt i für korrekte Reihenfolge
