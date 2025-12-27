@@ -101,23 +101,55 @@ class DoclingService:
                 result = self.pipeline.convert(file_path)
                 
                 processing_time = time.time() - start_time
+                logger.debug(f"Dokument konvertiert in {processing_time:.2f}s")
+                
+                # Zuerst das gesamte Dokument als Markdown extrahieren
+                try:
+                    full_markdown = result.document.export_to_markdown()
+                    logger.debug(f"Gesamtes Dokument extrahiert: {len(full_markdown)} Zeichen")
+                except Exception as e:
+                    logger.warning(f"Fehler beim Extrahieren des gesamten Markdowns: {str(e)}")
+                    full_markdown = ""
                 
                 # Seiteninformationen im Mistral OCR Format extrahieren
                 pages_data = []
                 if hasattr(result.document, 'pages') and result.document.pages:
-                    for i, page in enumerate(result.document.pages):
-                        # Markdown-Inhalt der Seite extrahieren
-                        page_markdown = ""
-                        try:
-                            if hasattr(page, 'export_to_markdown'):
-                                page_markdown = page.export_to_markdown()
-                            elif hasattr(page, 'text'):
-                                page_markdown = page.text
+                    total_pages = len(result.document.pages)
+                    logger.debug(f"Gefundene Seiten: {total_pages}")
+                    
+                    # Versuche, den Markdown-Inhalt nach Seiten aufzuteilen
+                    # Docling fügt manchmal Seitenumbrüche ein, die wir nutzen können
+                    markdown_parts = []
+                    if full_markdown and total_pages > 0:
+                        # Versuche nach Seitenumbrüchen zu splitten (falls vorhanden)
+                        if "\n\n---\n\n" in full_markdown:
+                            parts = full_markdown.split("\n\n---\n\n")
+                            if len(parts) == total_pages:
+                                markdown_parts = parts
                             else:
-                                page_markdown = str(page)
-                        except Exception as e:
-                            logger.warning(f"Fehler beim Extrahieren von Markdown für Seite {i}: {str(e)}")
-                            page_markdown = ""
+                                # Gleichmäßige Aufteilung
+                                chunk_size = len(full_markdown) // total_pages
+                                markdown_parts = [full_markdown[i:i+chunk_size] for i in range(0, len(full_markdown), chunk_size)]
+                                if len(markdown_parts) > total_pages:
+                                    markdown_parts = markdown_parts[:total_pages]
+                        else:
+                            # Gleichmäßige Aufteilung
+                            chunk_size = len(full_markdown) // total_pages
+                            markdown_parts = [full_markdown[i:i+chunk_size] for i in range(0, len(full_markdown), chunk_size)]
+                            if len(markdown_parts) > total_pages:
+                                markdown_parts = markdown_parts[:total_pages]
+                    
+                    # Falls keine Aufteilung möglich, verwende gesamten Inhalt für jede Seite
+                    if not markdown_parts:
+                        markdown_parts = [full_markdown] * total_pages
+                    
+                    # Stelle sicher, dass wir genug Teile haben
+                    while len(markdown_parts) < total_pages:
+                        markdown_parts.append("")
+                    
+                    for i, page in enumerate(result.document.pages):
+                        # Verwende den entsprechenden Markdown-Teil
+                        page_markdown = markdown_parts[i] if i < len(markdown_parts) else full_markdown
                         
                         # Dimensions-Informationen (falls verfügbar)
                         dimensions = None
