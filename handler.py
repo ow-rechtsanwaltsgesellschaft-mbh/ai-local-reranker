@@ -11,7 +11,7 @@ import os
 from typing import Dict, Any
 
 # Füge app-Verzeichnis zum Python-Pfad hinzu
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 
 # API-URL (läuft im gleichen Container)
 API_URL = "http://localhost:8000"

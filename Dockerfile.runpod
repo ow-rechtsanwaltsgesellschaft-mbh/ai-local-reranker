@@ -38,8 +38,8 @@ ENV PYTHONUNBUFFERED=1 \
 # App-Code kopieren
 COPY app/ ./app/
 
-# RunPod Handler kopieren
-COPY .runpod/handler.py ./handler.py
+# RunPod Handler kopieren (muss im Arbeitsverzeichnis liegen)
+COPY handler.py ./handler.py
 
 # Port freigeben (RunPod verwendet Port 8000)
 EXPOSE 8000
