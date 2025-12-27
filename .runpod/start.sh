@@ -4,7 +4,7 @@
 # Starte FastAPI im Hintergrund
 uvicorn app.main:app \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port 8888 \
     --timeout-keep-alive 120 \
     --timeout-graceful-shutdown 120 &
 

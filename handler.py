@@ -14,7 +14,7 @@ from typing import Dict, Any
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 
 # API-URL (läuft im gleichen Container)
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8888"
 MAX_WAIT_TIME = 180  # 3 Minuten für Modell-Laden
 
 # Globale Variable für API-Status
