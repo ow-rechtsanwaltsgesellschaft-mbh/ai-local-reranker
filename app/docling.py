@@ -392,7 +392,10 @@ class DoclingService:
                             logger.info(f"Seite {i} - Gesamt gefundene Bilder: {len(page_images)}")
                             
                             # Verarbeite gefundene Bilder
-                            for img in page_images:
+                            for img_idx, img in enumerate(page_images):
+                                logger.info(f"Seite {i} - Verarbeite Bild {img_idx}: Typ={type(img)}")
+                                logger.info(f"Seite {i} - Bild {img_idx} - Alle Attribute: {[attr for attr in dir(img) if not attr.startswith('_')]}")
+                                
                                 img_data = {}
                                 
                                 # Bounding Box extrahieren
@@ -431,6 +434,19 @@ class DoclingService:
                                         import base64
                                         from io import BytesIO
                                         from PIL import Image
+                                        
+                                        # Debug: Prüfe alle möglichen Bildquellen
+                                        logger.info(f"Seite {i} - Bild {img_idx} - Prüfe Bildquellen...")
+                                        logger.info(f"Seite {i} - Bild {img_idx} - hasattr(img, 'get_image'): {hasattr(img, 'get_image')}")
+                                        logger.info(f"Seite {i} - Bild {img_idx} - hasattr(img, 'image'): {hasattr(img, 'image')}")
+                                        logger.info(f"Seite {i} - Bild {img_idx} - hasattr(img, 'data'): {hasattr(img, 'data')}")
+                                        logger.info(f"Seite {i} - Bild {img_idx} - hasattr(img, 'path'): {hasattr(img, 'path')}")
+                                        logger.info(f"Seite {i} - Bild {img_idx} - hasattr(img, 'content_layer'): {hasattr(img, 'content_layer')}")
+                                        if hasattr(img, 'image'):
+                                            logger.info(f"Seite {i} - Bild {img_idx} - img.image Wert: {img.image}")
+                                        if hasattr(img, 'content_layer') and img.content_layer:
+                                            logger.info(f"Seite {i} - Bild {img_idx} - content_layer Typ: {type(img.content_layer)}")
+                                            logger.info(f"Seite {i} - Bild {img_idx} - content_layer Attribute: {[attr for attr in dir(img.content_layer) if not attr.startswith('_')]}")
                                         
                                         # Versuche verschiedene Wege, das Bild zu extrahieren
                                         image_data = None
