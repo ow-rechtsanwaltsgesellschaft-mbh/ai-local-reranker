@@ -6,7 +6,7 @@ Kompatibel mit Cohere Rerank API und OpenAI Embeddings API.
 import uuid
 from fastapi import FastAPI, HTTPException, Path
 from pydantic import BaseModel, Field
-from typing import List, Optional, Union, Union
+from typing import List, Optional, Union
 import logging
 from app.reranker import RerankerService
 from app.embeddings import EmbeddingsService
@@ -51,8 +51,8 @@ class RerankResponse(BaseModel):
 
 class EmbeddingRequest(BaseModel):
     """Request-Modell für Embeddings (OpenAI-Format)."""
+    model: str = Field(..., description="Modellname (erforderlich, z.B. 'bge-base', 'bge-large', 'jina-de', 'smollm3-de')")
     input: Union[str, List[str]] = Field(..., description="Text oder Liste von Texten zum Embedden")
-    model: Optional[str] = Field(None, description="Modellname (optional, wird aus URL verwendet wenn nicht angegeben)")
 
 
 # ===== Startup Event =====
@@ -128,6 +128,8 @@ async def rerank(request: RerankRequest):
     Führt Reranking für eine Query und eine Liste von Dokumenten durch.
     Kompatibel mit Cohere Rerank API Format.
     
+    Endpoint: POST /v1/rerank
+    
     Args:
         request: RerankRequest mit query, documents, optional top_n und model
         
@@ -180,16 +182,17 @@ async def rerank(request: RerankRequest):
 # ===== Embeddings Endpoints (OpenAI-Format) =====
 
 @app.post("/v1/embeddings", response_model=EmbeddingResponse)
-@app.post("/v1/{model_name}/embeddings", response_model=EmbeddingResponse)
-async def create_embeddings(
-    request: EmbeddingRequest,
-    model_name: Optional[str] = Path(None, description="Modellname aus URL")
-):
+async def create_embeddings(request: EmbeddingRequest):
     """
     Erstellt Embeddings für einen Text oder eine Liste von Texten (OpenAI-Format).
     
-    Der Modellname kann über die URL (/v1/{model_name}/embeddings) oder im Request-Body angegeben werden.
-    URL-Parameter hat Priorität.
+    Endpoint: POST /v1/embeddings
+    
+    Request-Format (OpenAI-kompatibel):
+    {
+      "model": "bge-base",
+      "input": "Text zum Embedden" oder ["Text1", "Text2"]
+    }
     
     Unterstützte Modelle:
     - bge-large: BAAI/bge-large
@@ -197,21 +200,15 @@ async def create_embeddings(
     - jina-de: jinaai/jina-embeddings-v2-base-de
     - smollm3-de: mayflowergmbh/smollm3-3b-german-embed
     
-    Beispiele:
-    - POST /v1/embeddings (verwendet Standard-Modell)
-    - POST /v1/bge-large/embeddings (verwendet BAAI/bge-large)
-    - POST /v1/jina-de/embeddings (verwendet jinaai/jina-embeddings-v2-base-de)
-    
     Args:
-        request: EmbeddingRequest mit input (Text oder Liste) und optional model
-        model_name: Modellname aus URL-Parameter
+        request: EmbeddingRequest mit model (Modellname) und input (Text oder Liste)
         
     Returns:
         EmbeddingResponse im OpenAI-Format
     """
     try:
-        # Bestimme Modellname (URL-Parameter hat Priorität)
-        final_model_name = model_name or request.model
+        # Modellname kommt aus Request-Body (OpenAI-Standard, erforderlich)
+        final_model_name = request.model
         
         # Normalisiere input zu Liste
         if isinstance(request.input, str):
