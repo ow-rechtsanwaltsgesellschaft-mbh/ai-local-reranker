@@ -233,8 +233,8 @@ class DoclingService:
                             page = result.document.pages[page_key]  # Page-Objekt
                         else:
                             page = result.document.pages[idx] if pages_are_objects else i
-                        # Verwende den entsprechenden Markdown-Teil
-                        page_markdown = markdown_parts[i] if i < len(markdown_parts) else full_markdown
+                        # Verwende den entsprechenden Markdown-Teil (idx für korrekte Reihenfolge)
+                        page_markdown = markdown_parts[idx] if idx < len(markdown_parts) else full_markdown
                         
                         # Dimensions-Informationen (falls verfügbar)
                         dimensions = None
@@ -453,10 +453,12 @@ class DoclingService:
                                         import traceback
                                         logger.debug(traceback.format_exc())
                                 
-                                # Immer hinzufügen, auch wenn nur BBox oder nur Base64 vorhanden ist
-                                # Oder wenn weder noch (für Debugging)
-                                images.append(img_data)
-                                logger.info(f"Bild hinzugefügt: bbox={img_data.get('bbox') is not None}, base64={img_data.get('base64') is not None}")
+                                # Nur hinzufügen, wenn mindestens BBox oder Base64 vorhanden ist
+                                if img_data.get("bbox") or img_data.get("base64"):
+                                    images.append(img_data)
+                                    logger.info(f"Bild hinzugefügt: bbox={img_data.get('bbox') is not None}, base64={img_data.get('base64') is not None}")
+                                else:
+                                    logger.warning(f"Bild nicht hinzugefügt - weder BBox noch Base64 vorhanden. Bild-Typ: {type(img)}")
                         
                         except Exception as e:
                             logger.debug(f"Fehler beim Extrahieren der Bilder von Seite {i}: {str(e)}")
