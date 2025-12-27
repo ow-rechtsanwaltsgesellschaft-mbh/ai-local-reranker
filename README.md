@@ -245,7 +245,11 @@ Das Reranker-Modell kann über die Umgebungsvariable `RERANKER_MODEL` ausgewähl
 
 ```bash
 # .env-Datei erstellen (optional)
+# Kopieren Sie .env.example zu .env und passen Sie die Werte an
+cp .env.example .env
+# Oder manuell:
 echo "RERANKER_MODEL=balanced" > .env
+echo "HF_TOKEN=your_hf_token_here" >> .env  # Optional: Für private Modelle
 
 # Oder direkt beim Start
 RERANKER_MODEL=balanced docker-compose up

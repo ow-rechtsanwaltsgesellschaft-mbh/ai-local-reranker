@@ -195,8 +195,8 @@ async def create_embeddings(request: EmbeddingRequest):
     }
     
     Unterstützte Modelle:
-    - bge-large: BAAI/bge-large
-    - bge-base: BAAI/bge-base
+    - bge-large: BAAI/bge-large-en-v1.5
+    - bge-base: BAAI/bge-base-en-v1.5
     - jina-de: jinaai/jina-embeddings-v2-base-de
     - smollm3-de: mayflowergmbh/smollm3-3b-german-embed
     

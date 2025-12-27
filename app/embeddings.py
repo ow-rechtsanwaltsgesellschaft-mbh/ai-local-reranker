@@ -24,16 +24,16 @@ def get_hf_token() -> Optional[str]:
 
 # Verfügbare Embedding-Modelle
 AVAILABLE_EMBEDDING_MODELS = {
-    "bge-large": "BAAI/bge-large",
-    "bge-base": "BAAI/bge-base",
-    "jina-de": "jinaai/jina-embeddings-v2-base-de",
-    "smollm3-de": "mayflowergmbh/smollm3-3b-german-embed",
+    "bge-large": "BAAI/bge-large-en-v1.5",  # BGE Large English
+    "bge-base": "BAAI/bge-base-en-v1.5",  # BGE Base English
+    "jina-de": "jinaai/jina-embeddings-v2-base-de",  # Jina German
+    "smollm3-de": "mayflowergmbh/smollm3-3b-german-embed",  # SmolLM German
     # Aliase
-    "default": "BAAI/bge-base"
+    "default": "BAAI/bge-base-en-v1.5"
 }
 
 # Standard-Modell
-DEFAULT_EMBEDDING_MODEL = "BAAI/bge-base"
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
 
 def resolve_embedding_model_name(model_name: Optional[str] = None) -> str:
@@ -51,11 +51,16 @@ def resolve_embedding_model_name(model_name: Optional[str] = None) -> str:
     else:
         return DEFAULT_EMBEDDING_MODEL
     
-    # Prüfe ob es ein Alias ist
-    if model_input.lower() in AVAILABLE_EMBEDDING_MODELS:
-        return AVAILABLE_EMBEDDING_MODELS[model_input.lower()]
+    # Prüfe ob es ein Alias ist (case-insensitive)
+    model_lower = model_input.lower()
+    if model_lower in AVAILABLE_EMBEDDING_MODELS:
+        return AVAILABLE_EMBEDDING_MODELS[model_lower]
     
-    # Direkter Modellname
+    # Prüfe auch direkten Modellnamen (case-sensitive)
+    if model_input in AVAILABLE_EMBEDDING_MODELS:
+        return AVAILABLE_EMBEDDING_MODELS[model_input]
+    
+    # Direkter Modellname (wird so verwendet wie angegeben)
     return model_input
 
 
