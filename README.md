@@ -1,24 +1,27 @@
-# AI Local Reranker API
+# AI Local Reranker & Embeddings API
 
 [![Runpod](https://api.runpod.io/badge/ow-rechtsanwaltsgesellschaft-mbh/ai-local-reranker)](https://console.runpod.io/hub/ow-rechtsanwaltsgesellschaft-mbh/ai-local-reranker)
 
-Eine Python-API für lokales Reranking auf CPU/GPU mit FastAPI und sentence-transformers.
+Eine modulare Python-API für lokales Reranking und Embeddings auf CPU/GPU mit FastAPI und sentence-transformers.
 
 ## Features
 
 - 🚀 **Lokales Reranking auf CPU/GPU** - Keine externe API erforderlich
+- 🔤 **Lokale Embeddings** - OpenAI-kompatible Embeddings-API
 - ⚡ **Schnell und effizient** - Optimiert für CPU- und GPU-Performance
 - 🐳 **Docker-ready** - Einfache Bereitstellung mit Docker Compose
 - ☁️ **RunPod-ready** - GPU-optimiertes Deployment auf RunPod
 - 📊 **RESTful API** - Standardisierte Endpoints
 - 🔧 **Best Practices** - Production-ready Code
 - 🔄 **Cohere-kompatibel** - Gleiches Request/Response-Format wie Cohere Rerank API
+- 🤖 **OpenAI-kompatibel** - Gleiches Request/Response-Format wie OpenAI Embeddings API
 
 ## Technologie-Stack
 
 - **FastAPI** - Moderne, schnelle Web-Framework
-- **sentence-transformers** - CrossEncoder für Reranking
+- **sentence-transformers** - CrossEncoder für Reranking, SentenceTransformer für Embeddings
 - **PyTorch** - CPU/GPU-optimiertes Machine Learning
+- **transformers** - Für spezielle Modelle (Qwen3-Reranker)
 - **Docker** - Containerisierung
 - **RunPod** - GPU-Cloud-Deployment (optional)
 
@@ -61,11 +64,45 @@ GET /health
 
 ```bash
 GET /model/info
+GET /v1/models
 ```
 
-Zeigt das aktuell verwendete Modell und verfügbare Optionen an.
+Beide Endpoints listen verfügbare Modelle im OpenAI-Format auf (Reranker und Embeddings).
 
-### Reranking (Cohere-kompatibel)
+**Response (OpenAI-Format):**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+      "object": "model",
+      "created": 1677610602,
+      "owned_by": "local",
+      "type": "reranker",
+      "alias": "fast"
+    },
+    {
+      "id": "BAAI/bge-base-en-v1.5",
+      "object": "model",
+      "created": 1677610602,
+      "owned_by": "local",
+      "type": "embedding",
+      "alias": "bge-base"
+    }
+  ]
+}
+```
+
+## Reranking API (Cohere-kompatibel)
+
+### Endpoint
+
+```bash
+POST /v1/rerank
+Content-Type: application/json
+```
 
 ```bash
 POST /v1/rerank
@@ -112,9 +149,93 @@ Content-Type: application/json
 
 **Hinweis:** Die `index`-Werte verweisen auf die Position im ursprünglichen `documents`-Array.
 
+### Verfügbare Reranker-Modelle
+
+| Alias | Modellname | Größe | Geschwindigkeit | Genauigkeit | Empfohlen für |
+|-------|------------|-------|-----------------|-------------|---------------|
+| `fast` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | ~80 MB | ⚡⚡⚡ Sehr schnell | ⭐⭐⭐ Gut | Standard, hoher Durchsatz (BERT-basiert) |
+| `balanced` | `cross-encoder/ms-marco-MiniLM-L-12-v2` | ~120 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐ Sehr gut | Gute Balance (BERT-basiert) |
+| `accurate` | `cross-encoder/ms-marco-electra-base` | ~450 MB | ⚡ Langsam | ⭐⭐⭐⭐⭐ Ausgezeichnet | Sehr genau (ELECTRA-basiert) |
+| `bge-v2` | `BAAI/bge-reranker-v2-m3` | ~560 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Empfohlen: Beste Balance** |
+| `bge-large` | `BAAI/bge-reranker-large-v2` | ~1.3 GB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Höchste Genauigkeit, mehrsprachig |
+| `zerank-1` | `zeroentropy/zerank-1` | ~1.1 GB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | ZeroEntropy, sehr leistungsstark (nicht-kommerziell) |
+| `zerank-1-small` | `zeroentropy/zerank-1-small` | ~440 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | ZeroEntropy, Apache 2.0 Lizenz |
+| `qwen3-0.6b` | `Qwen/Qwen3-Reranker-0.6B` | ~1.2 GB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | Qwen3 0.6B, schnell, mehrsprachig, Apache 2.0 |
+| `qwen3-4b` | `Qwen/Qwen3-Reranker-4B` | ~8 GB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Qwen3 4B, beste Balance, mehrsprachig, Apache 2.0 |
+| `qwen3-8b` | `Qwen/Qwen3-Reranker-8B` | ~16 GB | ⚡⚡⚡ Sehr langsam | ⭐⭐⭐⭐⭐⭐⭐ Extrem hoch | Qwen3 8B, höchste Genauigkeit, mehrsprachig, Apache 2.0 |
+| `bert-german` | `deepset/gbert-base-germandpr-reranking` | ~440 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Deutsche Texte** (German BERT) |
+
+**Standard:** `fast` (cross-encoder/ms-marco-MiniLM-L-6-v2)
+
+## Embeddings API (OpenAI-kompatibel)
+
+### Endpoint
+
+```bash
+POST /v1/embeddings
+Content-Type: application/json
+```
+
+### Request-Format
+
+```json
+{
+  "model": "bge-base",
+  "input": "Text zum Embedden"
+}
+```
+
+Oder für mehrere Texte:
+
+```json
+{
+  "model": "bge-large",
+  "input": [
+    "Erster Text",
+    "Zweiter Text",
+    "Dritter Text"
+  ]
+}
+```
+
+**Response (OpenAI-kompatibel):**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [0.1, 0.2, 0.3, ...],
+      "index": 0
+    }
+  ],
+  "model": "BAAI/bge-base-en-v1.5",
+  "usage": {
+    "prompt_tokens": 5,
+    "total_tokens": 5
+  }
+}
+```
+
+### Verfügbare Embedding-Modelle
+
+| Alias | Modellname | Größe | Geschwindigkeit | Genauigkeit | Empfohlen für |
+|-------|------------|-------|-----------------|-------------|---------------|
+| `bge-base` | `BAAI/bge-base-en-v1.5` | ~130 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Standard**, englische Texte, beste Balance |
+| `bge-large` | `BAAI/bge-large-en-v1.5` | ~335 MB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Höchste Genauigkeit, englische Texte |
+| `jina-de` | `jinaai/jina-embeddings-v2-base-de` | ~130 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Deutsche Texte**, mehrsprachig |
+| `smollm3-de` | `mayflowergmbh/smollm3-3b-german-embed` | ~6 GB | ⚡⚡⚡ Sehr langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Deutsche Texte, sehr große Dimensionen |
+
+**Standard:** `bge-base` (BAAI/bge-base-en-v1.5)
+
+**Hinweis:** Der Modellname muss im Request-Body angegeben werden (OpenAI-Standard).
+
 ## Beispiel-Requests
 
-### Mit cURL
+### Reranking
+
+#### Reranking mit cURL
 
 ```bash
 curl -X POST "http://localhost:8888/v1/rerank" \
@@ -126,11 +247,12 @@ curl -X POST "http://localhost:8888/v1/rerank" \
       "Java ist eine objektorientierte Sprache.",
       "Python wird häufig für Data Science verwendet."
     ],
-    "top_n": 2
+    "top_n": 2,
+    "model": "bge-v2"
   }'
 ```
 
-### Mit Python (Cohere-kompatibel)
+#### Reranking mit Python (Cohere-kompatibel)
 
 ```python
 import requests
@@ -184,6 +306,94 @@ response = requests.post(
 print(response.json())
 ```
 
+### Embeddings
+
+#### Embeddings mit cURL
+
+```bash
+curl -X POST "http://localhost:8888/v1/embeddings" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "bge-base",
+    "input": "Was ist Machine Learning?"
+  }'
+```
+
+Oder für mehrere Texte:
+
+```bash
+curl -X POST "http://localhost:8888/v1/embeddings" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "bge-large",
+    "input": [
+      "Machine Learning ist ein Teilbereich der KI.",
+      "Python ist eine Programmiersprache.",
+      "Deep Learning verwendet neuronale Netze."
+    ]
+  }'
+```
+
+#### Embeddings mit Python (OpenAI-kompatibel)
+
+```python
+import requests
+
+# Einzelner Text
+response = requests.post(
+    "http://localhost:8888/v1/embeddings",
+    json={
+        "model": "bge-base",
+        "input": "Was ist Machine Learning?"
+    }
+)
+
+result = response.json()
+print(f"Modell: {result['model']}")
+print(f"Embedding-Dimension: {len(result['data'][0]['embedding'])}")
+print(f"Token-Usage: {result['usage']}")
+
+# Mehrere Texte
+response = requests.post(
+    "http://localhost:8888/v1/embeddings",
+    json={
+        "model": "jina-de",  # Deutsches Modell
+        "input": [
+            "Machine Learning ist ein Teilbereich der KI.",
+            "Python ist eine Programmiersprache.",
+            "Deep Learning verwendet neuronale Netze."
+        ]
+    }
+)
+
+result = response.json()
+for item in result['data']:
+    print(f"Index {item['index']}: Embedding mit {len(item['embedding'])} Dimensionen")
+```
+
+#### OpenAI SDK-kompatibel
+
+Das API-Format ist kompatibel mit OpenAI, sodass Sie den Code nahezu unverändert verwenden können:
+
+```python
+# Statt: openai.Embedding.create(...)
+# Verwenden Sie: requests.post("http://localhost:8888/v1/embeddings", ...)
+
+import requests
+
+response = requests.post(
+    "http://localhost:8888/v1/embeddings",
+    json={
+        "model": "bge-base",
+        "input": "Text zum Embedden"
+    }
+)
+
+result = response.json()
+embedding = result['data'][0]['embedding']
+print(f"Embedding-Vektor: {embedding[:5]}...")  # Erste 5 Werte
+```
+
 ## Lokale Entwicklung (ohne Docker)
 
 ```bash
@@ -218,26 +428,33 @@ Die API ist dann unter `http://localhost:8888` erreichbar.
 
 ## Modell-Konfiguration
 
-Das Reranker-Modell kann über die Umgebungsvariable `RERANKER_MODEL` ausgewählt werden. Es stehen mehrere Modelle zur Verfügung, die unterschiedliche Balance zwischen Geschwindigkeit und Genauigkeit bieten:
+### Reranker-Modell auswählen
 
-### Verfügbare Modelle
-
-| Alias | Modellname | Größe | Geschwindigkeit | Genauigkeit | Empfohlen für |
-|-------|------------|-------|-----------------|-------------|---------------|
-| `fast` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | ~80 MB | ⚡⚡⚡ Sehr schnell | ⭐⭐⭐ Gut | Standard, hoher Durchsatz (BERT-basiert) |
-| `balanced` | `cross-encoder/ms-marco-MiniLM-L-12-v2` | ~120 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐ Sehr gut | Gute Balance (BERT-basiert) |
-| `bge-v2` | `BAAI/bge-reranker-v2-m3` | ~560 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Empfohlen: Beste Balance** |
-| `bge-large` | `BAAI/bge-reranker-large-v2` | ~1.3 GB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Höchste Genauigkeit, mehrsprachig |
-| `zerank-1` | `zeroentropy/zerank-1` | ~1.1 GB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | ZeroEntropy, sehr leistungsstark (nicht-kommerziell) |
-| `zerank-1-small` | `zeroentropy/zerank-1-small` | ~440 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | ZeroEntropy, Apache 2.0 Lizenz |
-| `qwen3-0.6b` | `Qwen/Qwen3-Reranker-0.6B` | ~1.2 GB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | Qwen3 0.6B, mehrsprachig (119 Sprachen), Apache 2.0 |
-| `qwen3-4b` | `Qwen/Qwen3-Reranker-4B` | ~8 GB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Qwen3 4B, beste Balance, mehrsprachig, Apache 2.0 |
-| `qwen3-8b` | `Qwen/Qwen3-Reranker-8B` | ~16 GB | ⚡⚡⚡ Sehr langsam | ⭐⭐⭐⭐⭐⭐⭐ Exzellent | Qwen3 8B, höchste Genauigkeit, mehrsprachig, Apache 2.0 |
-| `bert-german` | `deepset/gbert-base-germandpr-reranking` | ~440 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Deutsche Texte** (German BERT) |
+Das Reranker-Modell kann über die Umgebungsvariable `RERANKER_MODEL` ausgewählt werden. Siehe Tabelle oben für verfügbare Modelle.
 
 **Standard:** `fast` (cross-encoder/ms-marco-MiniLM-L-6-v2)
 
 **Empfehlung für beste CPU-Performance:** `bge-v2` (BAAI/bge-reranker-v2-m3) - bietet die beste Balance zwischen Genauigkeit und Geschwindigkeit auf CPU.
+
+### Embedding-Modell auswählen
+
+Das Embedding-Modell wird im Request-Body angegeben (OpenAI-Standard). Siehe Tabelle oben für verfügbare Modelle.
+
+**Standard:** `bge-base` (BAAI/bge-base-en-v1.5)
+
+**Empfehlung:**
+- **Englische Texte:** `bge-base` oder `bge-large`
+- **Deutsche Texte:** `jina-de` oder `smollm3-de`
+
+### Hugging Face Token
+
+Für private Modelle oder Modelle mit Zugriffsbeschränkungen können Sie einen Hugging Face Token über die Umgebungsvariable `HF_TOKEN` angeben:
+
+```bash
+export HF_TOKEN=your_hf_token_here
+```
+
+Token erhalten Sie unter: https://huggingface.co/settings/tokens
 
 ### Modell auswählen
 
@@ -288,7 +505,11 @@ curl http://localhost:8888/model/info
 Sie können auch direkt einen Modellnamen verwenden:
 
 ```bash
+# Reranker
 RERANKER_MODEL=cross-encoder/stsb-roberta-base docker-compose up
+
+# Embeddings (im Request-Body)
+# Verwenden Sie den vollständigen Modellnamen im "model"-Feld
 ```
 
 ## Performance-Optimierungen
@@ -305,7 +526,8 @@ RERANKER_MODEL=cross-encoder/stsb-roberta-base docker-compose up
 │   ├── __init__.py
 │   ├── main.py          # FastAPI-Anwendung
 │   ├── reranker.py      # Reranker-Service
-│   └── models.py        # Datenmodelle
+│   ├── embeddings.py     # Embeddings-Service
+│   └── models.py         # Datenmodelle (Reranker + Embeddings)
 ├── Dockerfile            # CPU-optimiertes Dockerfile
 ├── Dockerfile.runpod     # GPU-optimiertes Dockerfile für RunPod
 ├── docker-compose.yml

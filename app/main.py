@@ -96,27 +96,83 @@ async def health():
 
 @app.get("/model/info")
 async def model_info():
-    """Informationen über die verwendeten Modelle."""
+    """
+    Informationen über die verwendeten Modelle (OpenAI-Format).
+    Gibt sowohl Reranker- als auch Embedding-Modelle zurück.
+    """
     from app.reranker import AVAILABLE_MODELS
     from app.embeddings import AVAILABLE_EMBEDDING_MODELS
     
+    models = []
+    
+    # Reranker-Modelle hinzufügen
+    for alias, model_id in AVAILABLE_MODELS.items():
+        if alias != "default":
+            models.append({
+                "id": model_id,
+                "object": "model",
+                "created": 1677610602,  # Placeholder timestamp
+                "owned_by": "local",
+                "type": "reranker",
+                "alias": alias
+            })
+    
+    # Embedding-Modelle hinzufügen
+    for alias, model_id in AVAILABLE_EMBEDDING_MODELS.items():
+        if alias != "default":
+            models.append({
+                "id": model_id,
+                "object": "model",
+                "created": 1677610602,  # Placeholder timestamp
+                "owned_by": "local",
+                "type": "embedding",
+                "alias": alias
+            })
+    
     return {
-        "reranker": {
-            "current_model": reranker_service.get_model_name(),
-            "available_models": {
-                alias: model_name 
-                for alias, model_name in AVAILABLE_MODELS.items() 
-                if alias != "default"
-            }
-        },
-        "embeddings": {
-            "current_model": embeddings_service.get_model_name(),
-            "available_models": {
-                alias: model_name 
-                for alias, model_name in AVAILABLE_EMBEDDING_MODELS.items() 
-                if alias != "default"
-            }
-        }
+        "object": "list",
+        "data": models
+    }
+
+
+@app.get("/v1/models")
+async def list_models():
+    """
+    Listet verfügbare Modelle auf (OpenAI-Format).
+    Gibt sowohl Reranker- als auch Embedding-Modelle zurück.
+    """
+    from app.reranker import AVAILABLE_MODELS
+    from app.embeddings import AVAILABLE_EMBEDDING_MODELS
+    
+    models = []
+    
+    # Reranker-Modelle hinzufügen
+    for alias, model_id in AVAILABLE_MODELS.items():
+        if alias != "default":
+            models.append({
+                "id": model_id,
+                "object": "model",
+                "created": 1677610602,  # Placeholder timestamp
+                "owned_by": "local",
+                "type": "reranker",
+                "alias": alias
+            })
+    
+    # Embedding-Modelle hinzufügen
+    for alias, model_id in AVAILABLE_EMBEDDING_MODELS.items():
+        if alias != "default":
+            models.append({
+                "id": model_id,
+                "object": "model",
+                "created": 1677610602,  # Placeholder timestamp
+                "owned_by": "local",
+                "type": "embedding",
+                "alias": alias
+            })
+    
+    return {
+        "object": "list",
+        "data": models
     }
 
 
@@ -259,18 +315,36 @@ async def create_embeddings(request: EmbeddingRequest):
 @app.get("/v1/models")
 async def list_models():
     """
-    Listet verfügbare Embedding-Modelle auf (OpenAI-Format).
+    Listet verfügbare Modelle auf (OpenAI-Format).
+    Gibt sowohl Reranker- als auch Embedding-Modelle zurück.
     """
+    from app.reranker import AVAILABLE_MODELS
     from app.embeddings import AVAILABLE_EMBEDDING_MODELS
     
     models = []
+    
+    # Reranker-Modelle hinzufügen
+    for alias, model_id in AVAILABLE_MODELS.items():
+        if alias != "default":
+            models.append({
+                "id": model_id,
+                "object": "model",
+                "created": 1677610602,  # Placeholder timestamp
+                "owned_by": "local",
+                "type": "reranker",
+                "alias": alias
+            })
+    
+    # Embedding-Modelle hinzufügen
     for alias, model_id in AVAILABLE_EMBEDDING_MODELS.items():
         if alias != "default":
             models.append({
                 "id": model_id,
                 "object": "model",
                 "created": 1677610602,  # Placeholder timestamp
-                "owned_by": "local"
+                "owned_by": "local",
+                "type": "embedding",
+                "alias": alias
             })
     
     return {
