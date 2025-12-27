@@ -138,9 +138,17 @@ class DoclingService:
                                     logger.info(f"Bild {idx} - Page Index: {pic.page_index}")
                     # Prüfe auch pages
                     if hasattr(result.document, 'pages'):
-                        logger.info(f"Anzahl Seiten: {len(result.document.pages) if result.document.pages else 0}")
-                        if result.document.pages and len(result.document.pages) > 0:
-                            logger.info(f"Erste Seite - Typ: {type(result.document.pages[0])}, Wert: {result.document.pages[0]}")
+                        if isinstance(result.document.pages, dict):
+                            logger.info(f"Pages ist ein Dictionary mit {len(result.document.pages)} Einträgen")
+                            if result.document.pages:
+                                first_key = list(result.document.pages.keys())[0]
+                                logger.info(f"Erster Seiten-Key: {first_key}, Typ: {type(first_key)}, Wert: {result.document.pages[first_key]}")
+                        elif isinstance(result.document.pages, (list, tuple)):
+                            logger.info(f"Anzahl Seiten: {len(result.document.pages)}")
+                            if result.document.pages and len(result.document.pages) > 0:
+                                logger.info(f"Erste Seite - Typ: {type(result.document.pages[0])}, Wert: {result.document.pages[0]}")
+                        else:
+                            logger.info(f"Pages-Typ: {type(result.document.pages)}, Wert: {result.document.pages}")
                 
                 # Dokument-Metadaten extrahieren
                 metadata = {}
@@ -174,12 +182,18 @@ class DoclingService:
                 # Seiteninformationen im Mistral OCR Format extrahieren
                 pages_data = []
                 if hasattr(result.document, 'pages') and result.document.pages:
-                    total_pages = len(result.document.pages)
-                    logger.debug(f"Gefundene Seiten: {total_pages}")
-                    
-                    # Prüfe, ob pages tatsächlich Page-Objekte sind oder nur Zahlen
-                    first_page = result.document.pages[0] if result.document.pages else None
-                    pages_are_objects = first_page and not isinstance(first_page, (int, float))
+                    # pages könnte ein Dictionary oder eine Liste sein
+                    if isinstance(result.document.pages, dict):
+                        page_keys = sorted([k for k in result.document.pages.keys() if isinstance(k, (int, float))])
+                        total_pages = len(page_keys)
+                        logger.debug(f"Gefundene Seiten (Dict): {total_pages}, Keys: {page_keys}")
+                        pages_are_objects = True
+                    else:
+                        total_pages = len(result.document.pages)
+                        logger.debug(f"Gefundene Seiten (List): {total_pages}")
+                        first_page = result.document.pages[0] if result.document.pages else None
+                        pages_are_objects = first_page and not isinstance(first_page, (int, float))
+                        page_keys = list(range(total_pages))
                     
                     # Versuche, den Markdown-Inhalt nach Seiten aufzuteilen
                     # Docling fügt manchmal Seitenumbrüche ein, die wir nutzen können
@@ -211,9 +225,13 @@ class DoclingService:
                     while len(markdown_parts) < total_pages:
                         markdown_parts.append("")
                     
-                    # Iteriere über Seiten - pages könnte Page-Objekte oder Zahlen sein
-                    for i in range(total_pages):
-                        page = result.document.pages[i] if pages_are_objects else i
+                    # Iteriere über Seiten
+                    for idx, page_key in enumerate(page_keys):
+                        i = int(page_key)  # Seiten-Index (0, 1, 2, ...)
+                        if isinstance(result.document.pages, dict):
+                            page = result.document.pages[page_key]  # Page-Objekt
+                        else:
+                            page = result.document.pages[idx] if pages_are_objects else i
                         # Verwende den entsprechenden Markdown-Teil
                         page_markdown = markdown_parts[i] if i < len(markdown_parts) else full_markdown
                         
@@ -245,26 +263,37 @@ class DoclingService:
                                 for pic in result.document.pictures:
                                     # Prüfe, ob das Bild zu dieser Seite gehört
                                     pic_page = None
-                                    if hasattr(pic, 'page'):
-                                        pic_page = pic.page
-                                    elif hasattr(pic, 'page_index'):
-                                        pic_page = pic.page_index
-                                    elif hasattr(pic, 'page_num'):
-                                        pic_page = pic.page_num
                                     
-                                    if pic_page is not None and pic_page == i:
-                                        logger.info(f"Bild gehört zu Seite {i} (page-Attribut: {pic_page})")
+                                    # Versuche verschiedene Wege, die Seitenzuordnung zu finden
+                                    if hasattr(pic, 'meta') and pic.meta:
+                                        if isinstance(pic.meta, dict):
+                                            pic_page = pic.meta.get('page') or pic.meta.get('page_index') or pic.meta.get('page_num')
+                                    if pic_page is None:
+                                        if hasattr(pic, 'page'):
+                                            pic_page = pic.page
+                                        elif hasattr(pic, 'page_index'):
+                                            pic_page = pic.page_index
+                                        elif hasattr(pic, 'page_num'):
+                                            pic_page = pic.page_num
+                                    
+                                    # Seitenzuordnung prüfen
+                                    if pic_page is not None:
+                                        try:
+                                            # Konvertiere zu int falls nötig
+                                            pic_page_int = int(pic_page) if pic_page is not None else None
+                                            page_int = int(i) if i is not None else None
+                                            if pic_page_int == page_int:
+                                                logger.info(f"Bild gehört zu Seite {i} (page-Attribut: {pic_page})")
+                                                page_images.append(pic)
+                                        except (ValueError, TypeError):
+                                            # Falls Konvertierung fehlschlägt, vergleiche direkt
+                                            if pic_page == i:
+                                                logger.info(f"Bild gehört zu Seite {i} (page-Attribut: {pic_page})")
+                                                page_images.append(pic)
+                                    else:
+                                        # Wenn keine Seitenzuordnung, versuche über BBox oder füge alle hinzu
+                                        logger.info(f"Bild ohne Seitenzuordnung - wird allen Seiten hinzugefügt")
                                         page_images.append(pic)
-                                    elif pic_page is None:
-                                        # Wenn keine Seitenzuordnung, versuche über BBox
-                                        if hasattr(pic, 'bbox') and pic.bbox:
-                                            # Für jetzt: füge alle Bilder ohne Seitenzuordnung hinzu
-                                            # Später können wir BBox-basierte Zuordnung implementieren
-                                            logger.info(f"Bild ohne Seitenzuordnung, aber mit BBox: {pic.bbox}")
-                                            page_images.append(pic)
-                                        else:
-                                            logger.info(f"Bild ohne Seitenzuordnung hinzugefügt")
-                                            page_images.append(pic)
                             
                             # 2. Prüfe page.images (falls page ein Objekt ist)
                             if pages_are_objects and hasattr(page, 'images') and page.images:
@@ -321,21 +350,39 @@ class DoclingService:
                                         # Versuche verschiedene Wege, das Bild zu extrahieren
                                         image_data = None
                                         
-                                        # 1. Direktes PIL Image
-                                        if hasattr(img, 'image') and img.image:
-                                            image_data = img.image
-                                        # 2. Bilddaten als Bytes
-                                        elif hasattr(img, 'data') and img.data:
-                                            image_data = Image.open(BytesIO(img.data))
-                                        # 3. Bildpfad
-                                        elif hasattr(img, 'path') and img.path:
-                                            image_data = Image.open(img.path)
-                                        # 4. Bild-URL oder Pfad als String
-                                        elif hasattr(img, 'src') and img.src:
+                                        # 1. get_image() Methode (PictureItem hat diese)
+                                        if hasattr(img, 'get_image') and callable(img.get_image):
                                             try:
-                                                image_data = Image.open(img.src)
-                                            except:
-                                                pass
+                                                image_data = img.get_image()
+                                                logger.info(f"Bild über get_image() extrahiert")
+                                            except Exception as e:
+                                                logger.debug(f"get_image() fehlgeschlagen: {str(e)}")
+                                        
+                                        # 2. Direktes image Attribut
+                                        if image_data is None and hasattr(img, 'image') and img.image:
+                                            image_data = img.image
+                                            logger.info(f"Bild über image-Attribut extrahiert")
+                                        
+                                        # 3. Bilddaten als Bytes
+                                        if image_data is None and hasattr(img, 'data') and img.data:
+                                            image_data = Image.open(BytesIO(img.data))
+                                            logger.info(f"Bild über data-Attribut extrahiert")
+                                        
+                                        # 4. Bildpfad
+                                        if image_data is None and hasattr(img, 'path') and img.path:
+                                            image_data = Image.open(img.path)
+                                            logger.info(f"Bild über path-Attribut extrahiert")
+                                        
+                                        # 5. meta.path oder meta.src
+                                        if image_data is None and hasattr(img, 'meta') and img.meta:
+                                            if isinstance(img.meta, dict):
+                                                path = img.meta.get('path') or img.meta.get('src')
+                                                if path:
+                                                    try:
+                                                        image_data = Image.open(path)
+                                                        logger.info(f"Bild über meta.path/meta.src extrahiert")
+                                                    except:
+                                                        pass
                                         
                                         if image_data:
                                             buffered = BytesIO()
@@ -349,8 +396,13 @@ class DoclingService:
                                             image_data.save(buffered, format="PNG")
                                             img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                                             img_data["base64"] = img_base64
+                                            logger.info(f"Bild erfolgreich als Base64 kodiert ({len(img_base64)} Zeichen)")
+                                        else:
+                                            logger.warning(f"Konnte Bild nicht extrahieren - keine verfügbare Quelle")
                                     except Exception as e:
-                                        logger.debug(f"Fehler beim Base64-Kodieren des Bildes: {str(e)}")
+                                        logger.warning(f"Fehler beim Base64-Kodieren des Bildes: {str(e)}")
+                                        import traceback
+                                        logger.debug(traceback.format_exc())
                                 
                                 # Nur hinzufügen, wenn mindestens bbox oder base64 vorhanden
                                 if img_data.get("bbox") or img_data.get("base64"):
