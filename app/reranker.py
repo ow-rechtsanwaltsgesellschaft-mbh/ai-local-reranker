@@ -156,7 +156,18 @@ class RerankerService:
                 self.model = RerankerService._model_cache[self.model_name]
             else:
                 logger.info(f"Lade Reranker-Modell: {self.model_name}")
-                # CrossEncoder läuft standardmäßig auf CPU
+                
+                # GPU-Status prüfen
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        logger.info(f"GPU verfügbar: {torch.cuda.get_device_name(0)} (VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB)")
+                    else:
+                        logger.info("GPU nicht verfügbar, verwende CPU")
+                except Exception:
+                    logger.debug("Konnte GPU-Status nicht prüfen")
+                
+                # CrossEncoder erkennt automatisch GPU, wenn verfügbar
                 # Zerank-Modelle benötigen trust_remote_code=True
                 if "zerank" in self.model_name.lower():
                     self.model = CrossEncoder(self.model_name, trust_remote_code=True)

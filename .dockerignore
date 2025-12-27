@@ -23,4 +23,8 @@ htmlcov/
 .vscode/
 *.md
 !README.md
-
+!RUNPOD_DEPLOYMENT.md
+Dockerfile
+docker-compose.yml
+test_api.py
+start_local.py

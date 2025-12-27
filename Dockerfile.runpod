@@ -1,0 +1,50 @@
+# GPU-fähiges Dockerfile für RunPod
+# Verwendet CUDA-optimiertes PyTorch für GPU-Beschleunigung
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+# Python installieren
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python-Symlinks erstellen
+RUN ln -s /usr/bin/python3.11 /usr/bin/python && \
+    ln -s /usr/bin/python3.11 /usr/bin/python3
+
+# Arbeitsverzeichnis setzen
+WORKDIR /app
+
+# Python-Abhängigkeiten kopieren und installieren
+# PyTorch mit CUDA-Unterstützung für GPU
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    torch>=2.2.0 \
+    torchvision \
+    torchaudio \
+    --index-url https://download.pytorch.org/whl/cu121 && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Umgebungsvariablen setzen
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    CUDA_VISIBLE_DEVICES=0 \
+    TORCH_DEVICE=cuda
+
+# App-Code kopieren
+COPY app/ ./app/
+
+# Port freigeben (RunPod verwendet Port 8000)
+EXPOSE 8000
+
+# Health-Check mit erhöhten Timeouts für Modell-Laden
+HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+# Uvicorn starten mit erhöhten Timeouts für große Modelle
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120", "--timeout-graceful-shutdown", "120"]
+

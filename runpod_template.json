@@ -1,0 +1,30 @@
+{
+  "name": "AI Local Reranker API",
+  "imageName": "YOUR_DOCKERHUB_USERNAME/ai-local-reranker:latest",
+  "containerDiskInGb": 20,
+  "volumeInGb": 10,
+  "volumeMountPath": "/root/.cache",
+  "env": [
+    {
+      "key": "RERANKER_MODEL",
+      "value": "bge-v2"
+    },
+    {
+      "key": "PYTHONUNBUFFERED",
+      "value": "1"
+    }
+  ],
+  "dockerArgs": "",
+  "ports": "8000/http",
+  "startJupyter": false,
+  "startSsh": false,
+  "isPublic": false,
+  "isServerless": true,
+  "handlerPath": "",
+  "handlerTimeout": 300,
+  "handlerMaxConcurrency": 1,
+  "handlerMaxWorkers": 1,
+  "handlerMaxRetries": 3,
+  "handlerMaxExecutionTime": 300
+}
+

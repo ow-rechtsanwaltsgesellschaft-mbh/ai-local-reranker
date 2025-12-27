@@ -4,9 +4,10 @@ Eine Python-API für lokales Reranking auf CPU mit FastAPI und sentence-transfor
 
 ## Features
 
-- 🚀 **Lokales Reranking auf CPU** - Keine externe API erforderlich
-- ⚡ **Schnell und effizient** - Optimiert für CPU-Performance
+- 🚀 **Lokales Reranking auf CPU/GPU** - Keine externe API erforderlich
+- ⚡ **Schnell und effizient** - Optimiert für CPU- und GPU-Performance
 - 🐳 **Docker-ready** - Einfache Bereitstellung mit Docker Compose
+- ☁️ **RunPod-ready** - GPU-optimiertes Deployment auf RunPod
 - 📊 **RESTful API** - Standardisierte Endpoints
 - 🔧 **Best Practices** - Production-ready Code
 - 🔄 **Cohere-kompatibel** - Gleiches Request/Response-Format wie Cohere Rerank API
@@ -15,8 +16,9 @@ Eine Python-API für lokales Reranking auf CPU mit FastAPI und sentence-transfor
 
 - **FastAPI** - Moderne, schnelle Web-Framework
 - **sentence-transformers** - CrossEncoder für Reranking
-- **PyTorch** - CPU-optimiertes Machine Learning
+- **PyTorch** - CPU/GPU-optimiertes Machine Learning
 - **Docker** - Containerisierung
+- **RunPod** - GPU-Cloud-Deployment (optional)
 
 ## Schnellstart
 
@@ -294,11 +296,38 @@ RERANKER_MODEL=cross-encoder/stsb-roberta-base docker-compose up
 │   ├── main.py          # FastAPI-Anwendung
 │   ├── reranker.py      # Reranker-Service
 │   └── models.py        # Datenmodelle
-├── Dockerfile
+├── Dockerfile            # CPU-optimiertes Dockerfile
+├── Dockerfile.runpod     # GPU-optimiertes Dockerfile für RunPod
 ├── docker-compose.yml
 ├── requirements.txt
+├── runpod_template.json  # RunPod Template-Konfiguration
+├── RUNPOD_DEPLOYMENT.md  # RunPod Deployment-Anleitung
 └── README.md
 ```
+
+## RunPod Deployment
+
+Die API kann auch auf RunPod mit GPU-Unterstützung bereitgestellt werden für deutlich bessere Performance.
+
+Siehe [RUNPOD_DEPLOYMENT.md](RUNPOD_DEPLOYMENT.md) für eine detaillierte Anleitung.
+
+### Schnellstart RunPod
+
+```bash
+# 1. GPU-fähiges Image bauen
+docker build -f Dockerfile.runpod -t your-username/ai-local-reranker:latest .
+
+# 2. Zu Docker Hub pushen
+docker push your-username/ai-local-reranker:latest
+
+# 3. RunPod Template erstellen (siehe RUNPOD_DEPLOYMENT.md)
+```
+
+**Vorteile von RunPod:**
+- ⚡ **GPU-Beschleunigung** - 10-100x schneller als CPU
+- 💰 **Pay-per-use** - Nur zahlen, wenn aktiv
+- 🔄 **Auto-Scaling** - Automatische Skalierung bei Last
+- 🚀 **Schnelle Deployment** - In Minuten live
 
 ## Lizenz
 
