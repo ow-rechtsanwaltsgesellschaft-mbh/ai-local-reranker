@@ -631,12 +631,12 @@ class DoclingService:
                                         import traceback
                                         logger.debug(traceback.format_exc())
                                 
-                                # Nur hinzufügen, wenn mindestens BBox oder Base64 vorhanden ist
-                                if img_data.get("bbox") or img_data.get("base64"):
+                                # Nur hinzufügen, wenn Base64 vorhanden ist (keine Bilder ohne Base64)
+                                if img_data.get("base64"):
                                     images.append(img_data)
-                                    logger.info(f"Bild hinzugefügt: bbox={img_data.get('bbox') is not None}, base64={img_data.get('base64') is not None}")
+                                    logger.info(f"Bild hinzugefügt: base64 vorhanden ({len(img_data.get('base64', ''))} Zeichen)")
                                 else:
-                                    logger.warning(f"Bild nicht hinzugefügt - weder BBox noch Base64 vorhanden. Bild-Typ: {type(img)}")
+                                    logger.debug(f"Bild nicht hinzugefügt - kein Base64 vorhanden. Bild-Typ: {type(img)}")
                         
                         except Exception as e:
                             logger.debug(f"Fehler beim Extrahieren der Bilder von Seite {i}: {str(e)}")
