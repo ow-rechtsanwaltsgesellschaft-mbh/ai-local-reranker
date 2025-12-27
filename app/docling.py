@@ -189,11 +189,69 @@ class DoclingService:
                         
                         # Bilder extrahieren (falls verfügbar)
                         images = []
-                        if hasattr(page, 'images') and page.images:
-                            for img in page.images:
+                        try:
+                            # Debug: Prüfe verfügbare Attribute
+                            logger.debug(f"Seite {i} - Verfügbare Attribute: {dir(page)}")
+                            
+                            # Versuche verschiedene Quellen für Bilder
+                            page_images = []
+                            
+                            # 1. Prüfe page.images
+                            if hasattr(page, 'images') and page.images:
+                                logger.debug(f"Seite {i} - Gefundene Bilder in page.images: {len(page.images)}")
+                                page_images.extend(page.images)
+                            
+                            # 2. Prüfe page.content für Bilder
+                            if hasattr(page, 'content') and page.content:
+                                logger.debug(f"Seite {i} - page.content vorhanden: {type(page.content)}")
+                                if hasattr(page.content, 'images') and page.content.images:
+                                    logger.debug(f"Seite {i} - Gefundene Bilder in page.content.images: {len(page.content.images)}")
+                                    page_images.extend(page.content.images)
+                            
+                            # 3. Prüfe das gesamte Dokument für seiten-spezifische Bilder
+                            if hasattr(result.document, 'images') and result.document.images:
+                                logger.debug(f"Seite {i} - Gefundene Bilder im Dokument: {len(result.document.images)}")
+                                # Filtere Bilder, die zu dieser Seite gehören
+                                for doc_img in result.document.images:
+                                    # Prüfe, ob das Bild zu dieser Seite gehört (z.B. über bbox)
+                                    if hasattr(doc_img, 'page') and doc_img.page == i:
+                                        page_images.append(doc_img)
+                                    elif hasattr(doc_img, 'bbox'):
+                                        # Prüfe, ob bbox innerhalb der Seiten-Bbox liegt
+                                        if hasattr(page, 'bbox') and page.bbox:
+                                            page_bbox = page.bbox
+                                            img_bbox = doc_img.bbox
+                                            # Einfache Überlappungsprüfung
+                                            if (img_bbox[1] >= page_bbox[1] and img_bbox[1] <= page_bbox[3]):
+                                                page_images.append(doc_img)
+                            
+                            # 4. Prüfe page.items für Bilder
+                            if hasattr(page, 'items') and page.items:
+                                logger.debug(f"Seite {i} - Gefundene Items: {len(page.items)}")
+                                for item in page.items:
+                                    if hasattr(item, 'type') and 'image' in str(item.type).lower():
+                                        logger.debug(f"Seite {i} - Bild gefunden in items (type): {item.type}")
+                                        page_images.append(item)
+                                    elif hasattr(item, '__class__') and 'image' in str(item.__class__).lower():
+                                        logger.debug(f"Seite {i} - Bild gefunden in items (class): {item.__class__}")
+                                        page_images.append(item)
+                            
+                            logger.debug(f"Seite {i} - Gesamt gefundene Bilder: {len(page_images)}")
+                            
+                            # Verarbeite gefundene Bilder
+                            for img in page_images:
                                 img_data = {}
-                                if hasattr(img, 'bbox'):
+                                
+                                # Bounding Box extrahieren
+                                if hasattr(img, 'bbox') and img.bbox:
                                     img_data["bbox"] = list(img.bbox) if img.bbox else []
+                                elif hasattr(img, 'bounds') and img.bounds:
+                                    img_data["bbox"] = list(img.bounds) if img.bounds else []
+                                elif hasattr(img, 'rect') and img.rect:
+                                    # Konvertiere rect zu bbox
+                                    rect = img.rect
+                                    if hasattr(rect, 'x') and hasattr(rect, 'y') and hasattr(rect, 'width') and hasattr(rect, 'height'):
+                                        img_data["bbox"] = [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height]
                                 
                                 # Base64-Kodierung (falls aktiviert)
                                 if include_images_base64:
@@ -202,20 +260,46 @@ class DoclingService:
                                         from io import BytesIO
                                         from PIL import Image
                                         
-                                        # Versuche, das Bild zu extrahieren und zu kodieren
+                                        # Versuche verschiedene Wege, das Bild zu extrahieren
+                                        image_data = None
+                                        
+                                        # 1. Direktes PIL Image
                                         if hasattr(img, 'image') and img.image:
-                                            # Konvertiere PIL Image zu Base64
+                                            image_data = img.image
+                                        # 2. Bilddaten als Bytes
+                                        elif hasattr(img, 'data') and img.data:
+                                            image_data = Image.open(BytesIO(img.data))
+                                        # 3. Bildpfad
+                                        elif hasattr(img, 'path') and img.path:
+                                            image_data = Image.open(img.path)
+                                        # 4. Bild-URL oder Pfad als String
+                                        elif hasattr(img, 'src') and img.src:
+                                            try:
+                                                image_data = Image.open(img.src)
+                                            except:
+                                                pass
+                                        
+                                        if image_data:
                                             buffered = BytesIO()
-                                            img.image.save(buffered, format="PNG")
+                                            # Konvertiere zu RGB falls nötig
+                                            if image_data.mode in ('RGBA', 'LA', 'P'):
+                                                rgb_image = Image.new('RGB', image_data.size, (255, 255, 255))
+                                                if image_data.mode == 'P':
+                                                    image_data = image_data.convert('RGBA')
+                                                rgb_image.paste(image_data, mask=image_data.split()[-1] if image_data.mode == 'RGBA' else None)
+                                                image_data = rgb_image
+                                            image_data.save(buffered, format="PNG")
                                             img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                                             img_data["base64"] = img_base64
-                                        elif hasattr(img, 'data') and img.data:
-                                            # Falls Bilddaten direkt verfügbar sind
-                                            img_data["base64"] = base64.b64encode(img.data).decode('utf-8')
                                     except Exception as e:
-                                        logger.warning(f"Fehler beim Base64-Kodieren des Bildes: {str(e)}")
+                                        logger.debug(f"Fehler beim Base64-Kodieren des Bildes: {str(e)}")
                                 
-                                images.append(img_data)
+                                # Nur hinzufügen, wenn mindestens bbox oder base64 vorhanden
+                                if img_data.get("bbox") or img_data.get("base64"):
+                                    images.append(img_data)
+                        
+                        except Exception as e:
+                            logger.debug(f"Fehler beim Extrahieren der Bilder von Seite {i}: {str(e)}")
                         
                         # Tabellen extrahieren (falls verfügbar)
                         tables = []

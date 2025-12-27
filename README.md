@@ -123,12 +123,20 @@ Content-Type: multipart/form-data
 **Request:**
 - `file`: Datei (PDF, DOCX, DOC, TXT, etc.)
 - `output_format`: Ausgabeformat (`markdown`, `json`, `text`) - Standard: `markdown`
+- `include_images_base64`: Bilder als Base64 kodieren (wie Mistral OCR) - Standard: `false`
 
 **Beispiel mit curl:**
 ```bash
+# Standard (ohne Base64-Bilder)
 curl -X POST "http://localhost:8890/docling/v1/convert" \
   -F "file=@document.pdf" \
   -F "output_format=markdown"
+
+# Mit Base64-kodierten Bildern (wie Mistral OCR)
+curl -X POST "http://localhost:8890/docling/v1/convert" \
+  -F "file=@document.pdf" \
+  -F "output_format=markdown" \
+  -F "include_images_base64=true"
 ```
 
 #### Dokumentenkonvertierung von Dateipfad
@@ -142,22 +150,52 @@ Content-Type: application/json
 ```json
 {
   "file_path": "/app/documents/document.pdf",
-  "output_format": "markdown"
+  "output_format": "markdown",
+  "include_images_base64": false
 }
 ```
 
-**Response:**
+**Response (Mistral OCR-kompatibel):**
 ```json
 {
-  "success": true,
-  "content": "# Dokumenttitel\n\nInhalt des Dokuments...",
+  "pages": [
+    {
+      "index": 0,
+      "markdown": "# Dokumenttitel\n\nExtrahierter Textinhalt...",
+      "dimensions": {
+        "dpi": 200,
+        "height": 2200,
+        "width": 1700
+      },
+      "images": [
+        {
+          "bbox": [100, 150, 400, 450],
+          "base64": "iVBORw0KGgoAAAANSUhEUgAA..."  // Nur wenn include_images_base64=true
+        }
+      ],
+      "tables": [
+        {
+          "bbox": [100, 200, 500, 400],
+          "columns": ["Spalte 1", "Spalte 2"],
+          "rows": [
+            ["Wert 1", "Wert 2"],
+            ["Wert 3", "Wert 4"]
+          ]
+        }
+      ]
+    }
+  ],
   "metadata": {
-    "file_path": "document.pdf",
-    "format": "markdown",
-    "pages": 5,
-    "tables": 2
-  },
-  "error": null
+    "title": "Dokumenttitel",
+    "author": "Autor",
+    "language": "de",
+    "subject": "Betreff",
+    "creator": "Erstellungsprogramm",
+    "producer": "Produktionsprogramm",
+    "creation_date": "2024-01-01T00:00:00",
+    "modification_date": "2024-01-02T00:00:00",
+    "page_count": 5
+  }
 }
 ```
 
