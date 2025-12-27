@@ -34,17 +34,39 @@ class ConvertRequest(BaseModel):
     include_images_base64: bool = Field(False, description="Bilder als Base64 kodieren (wie Mistral OCR)")
 
 
+class TableData(BaseModel):
+    """Tabellen-Daten im Mistral OCR Format."""
+    bbox: Optional[List[float]] = None
+    rows: List[List[str]] = Field(default_factory=list)
+    columns: Optional[List[str]] = None
+
+
 class PageData(BaseModel):
     """Seiten-Daten im Mistral OCR Format."""
     index: int
     markdown: str
     dimensions: Optional[dict] = None
     images: List[dict] = Field(default_factory=list)
+    tables: List[TableData] = Field(default_factory=list)
+
+
+class DocumentMetadata(BaseModel):
+    """Dokument-Metadaten im Mistral OCR Format."""
+    title: Optional[str] = None
+    author: Optional[str] = None
+    language: Optional[str] = None
+    subject: Optional[str] = None
+    creator: Optional[str] = None
+    producer: Optional[str] = None
+    creation_date: Optional[str] = None
+    modification_date: Optional[str] = None
+    page_count: Optional[int] = None
 
 
 class ConvertResponse(BaseModel):
     """Response-Modell für Dokumentenkonvertierung (Mistral OCR Format)."""
     pages: List[PageData]
+    metadata: Optional[DocumentMetadata] = None
 
 
 # ===== Startup/Shutdown Events =====
@@ -132,9 +154,19 @@ async def convert_document(
         # Response im Mistral OCR Format zurückgeben
         pages_data = []
         for page_dict in result.get("pages", []):
+            # Tabellen-Daten konvertieren
+            tables_data = []
+            for table_dict in page_dict.get("tables", []):
+                tables_data.append(TableData(**table_dict))
+            page_dict["tables"] = tables_data
             pages_data.append(PageData(**page_dict))
         
-        return ConvertResponse(pages=pages_data)
+        # Metadaten konvertieren
+        metadata = None
+        if result.get("metadata"):
+            metadata = DocumentMetadata(**result["metadata"])
+        
+        return ConvertResponse(pages=pages_data, metadata=metadata)
     
     except HTTPException:
         raise
@@ -186,9 +218,19 @@ async def convert_document_from_path(
         # Response im Mistral OCR Format zurückgeben
         pages_data = []
         for page_dict in result.get("pages", []):
+            # Tabellen-Daten konvertieren
+            tables_data = []
+            for table_dict in page_dict.get("tables", []):
+                tables_data.append(TableData(**table_dict))
+            page_dict["tables"] = tables_data
             pages_data.append(PageData(**page_dict))
         
-        return ConvertResponse(pages=pages_data)
+        # Metadaten konvertieren
+        metadata = None
+        if result.get("metadata"):
+            metadata = DocumentMetadata(**result["metadata"])
+        
+        return ConvertResponse(pages=pages_data, metadata=metadata)
     
     except HTTPException:
         raise

@@ -104,6 +104,27 @@ class DoclingService:
                 processing_time = time.time() - start_time
                 logger.debug(f"Dokument konvertiert in {processing_time:.2f}s")
                 
+                # Dokument-Metadaten extrahieren
+                metadata = {}
+                try:
+                    doc = result.document
+                    if hasattr(doc, 'metadata') and doc.metadata:
+                        metadata = {
+                            "title": getattr(doc.metadata, 'title', None),
+                            "author": getattr(doc.metadata, 'author', None),
+                            "language": getattr(doc.metadata, 'language', None),
+                            "subject": getattr(doc.metadata, 'subject', None),
+                            "creator": getattr(doc.metadata, 'creator', None),
+                            "producer": getattr(doc.metadata, 'producer', None),
+                            "creation_date": str(getattr(doc.metadata, 'creation_date', None)) if hasattr(doc.metadata, 'creation_date') else None,
+                            "modification_date": str(getattr(doc.metadata, 'modification_date', None)) if hasattr(doc.metadata, 'modification_date') else None,
+                        }
+                    # Seitenanzahl hinzufügen
+                    if hasattr(doc, 'pages') and doc.pages:
+                        metadata["page_count"] = len(doc.pages)
+                except Exception as e:
+                    logger.warning(f"Fehler beim Extrahieren der Metadaten: {str(e)}")
+                
                 # Zuerst das gesamte Dokument als Markdown extrahieren
                 try:
                     full_markdown = result.document.export_to_markdown()
@@ -196,22 +217,131 @@ class DoclingService:
                                 
                                 images.append(img_data)
                         
+                        # Tabellen extrahieren (falls verfügbar)
+                        tables = []
+                        try:
+                            # Prüfe, ob die Seite Tabellen hat
+                            if hasattr(page, 'tables') and page.tables:
+                                for table in page.tables:
+                                    table_data = {}
+                                    
+                                    # Bounding Box
+                                    if hasattr(table, 'bbox') and table.bbox:
+                                        table_data["bbox"] = list(table.bbox)
+                                    
+                                    # Tabellen-Struktur extrahieren
+                                    rows = []
+                                    columns = None
+                                    
+                                    # Versuche, Tabellenstruktur zu extrahieren
+                                    if hasattr(table, 'rows') and table.rows:
+                                        for row in table.rows:
+                                            row_data = []
+                                            if hasattr(row, 'cells') and row.cells:
+                                                for cell in row.cells:
+                                                    cell_text = ""
+                                                    if hasattr(cell, 'text'):
+                                                        cell_text = cell.text
+                                                    elif hasattr(cell, 'content'):
+                                                        cell_text = str(cell.content)
+                                                    row_data.append(cell_text)
+                                            rows.append(row_data)
+                                            
+                                            # Erste Zeile als Spaltenüberschriften verwenden
+                                            if columns is None and row_data:
+                                                columns = row_data
+                                    elif hasattr(table, 'cells'):
+                                        # Alternative Struktur: direkter Zugriff auf Zellen
+                                        # Versuche, eine Matrix zu erstellen
+                                        cells = table.cells
+                                        if isinstance(cells, list) and len(cells) > 0:
+                                            # Annahme: erste Zeile enthält Spaltenüberschriften
+                                            if len(cells) > 0:
+                                                first_row = cells[0] if isinstance(cells[0], list) else [cells[0]]
+                                                columns = [str(cell) for cell in first_row]
+                                                # Rest als Zeilen
+                                                for row_cells in cells[1:]:
+                                                    if isinstance(row_cells, list):
+                                                        rows.append([str(cell) for cell in row_cells])
+                                                    else:
+                                                        rows.append([str(row_cells)])
+                                    
+                                    # Falls keine Struktur gefunden, versuche Markdown zu parsen
+                                    if not rows and hasattr(table, 'to_markdown'):
+                                        try:
+                                            table_markdown = table.to_markdown()
+                                            # Einfacher Parser für Markdown-Tabellen
+                                            lines = table_markdown.strip().split('\n')
+                                            if len(lines) > 1:
+                                                # Erste Zeile als Spalten
+                                                columns = [col.strip() for col in lines[0].split('|') if col.strip()]
+                                                # Rest als Zeilen
+                                                for line in lines[2:]:  # Überspringen der Trennlinie
+                                                    row = [col.strip() for col in line.split('|') if col.strip()]
+                                                    if row:
+                                                        rows.append(row)
+                                        except Exception as e:
+                                            logger.debug(f"Fehler beim Parsen der Tabelle als Markdown: {str(e)}")
+                                    
+                                    table_data["rows"] = rows
+                                    if columns:
+                                        table_data["columns"] = columns
+                                    
+                                    tables.append(table_data)
+                        except Exception as e:
+                            logger.warning(f"Fehler beim Extrahieren der Tabellen: {str(e)}")
+                        
                         page_info = {
                             "index": i,
                             "markdown": page_markdown,
                             "dimensions": dimensions,
-                            "images": images
+                            "images": images,
+                            "tables": tables
                         }
                         pages_data.append(page_info)
                 else:
                     # Falls keine Seiteninformationen verfügbar, gesamtes Dokument als eine Seite
                     try:
                         full_markdown = result.document.export_to_markdown()
+                        
+                        # Versuche, Tabellen aus dem gesamten Dokument zu extrahieren
+                        tables = []
+                        try:
+                            if hasattr(result.document, 'tables') and result.document.tables:
+                                for table in result.document.tables:
+                                    table_data = {}
+                                    if hasattr(table, 'bbox') and table.bbox:
+                                        table_data["bbox"] = list(table.bbox)
+                                    
+                                    rows = []
+                                    columns = None
+                                    if hasattr(table, 'rows') and table.rows:
+                                        for row in table.rows:
+                                            row_data = []
+                                            if hasattr(row, 'cells') and row.cells:
+                                                for cell in row.cells:
+                                                    cell_text = ""
+                                                    if hasattr(cell, 'text'):
+                                                        cell_text = cell.text
+                                                    elif hasattr(cell, 'content'):
+                                                        cell_text = str(cell.content)
+                                                    row_data.append(cell_text)
+                                            rows.append(row_data)
+                                            if columns is None and row_data:
+                                                columns = row_data
+                                    table_data["rows"] = rows
+                                    if columns:
+                                        table_data["columns"] = columns
+                                    tables.append(table_data)
+                        except Exception as e:
+                            logger.debug(f"Fehler beim Extrahieren der Tabellen aus dem Dokument: {str(e)}")
+                        
                         pages_data.append({
                             "index": 0,
                             "markdown": full_markdown,
                             "dimensions": None,
-                            "images": []
+                            "images": [],
+                            "tables": tables
                         })
                     except Exception as e:
                         logger.warning(f"Fehler beim Extrahieren des gesamten Dokuments: {str(e)}")
@@ -219,11 +349,13 @@ class DoclingService:
                             "index": 0,
                             "markdown": "",
                             "dimensions": None,
-                            "images": []
+                            "images": [],
+                            "tables": []
                         })
                 
                 return {
                     "pages": pages_data,
+                    "metadata": metadata if metadata else None,
                     "success": True
                 }
                 
