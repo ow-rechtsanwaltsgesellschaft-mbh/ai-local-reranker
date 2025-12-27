@@ -136,6 +136,31 @@ class DoclingService:
                                     logger.info(f"Bild {idx} - Page: {pic.page}")
                                 elif hasattr(pic, 'page_index'):
                                     logger.info(f"Bild {idx} - Page Index: {pic.page_index}")
+                                # Prüfe auch prov für Seitenzuordnung
+                                if hasattr(pic, 'prov') and pic.prov:
+                                    logger.info(f"Bild {idx} - Prov: {pic.prov}")
+                                    if isinstance(pic.prov, dict):
+                                        logger.info(f"Bild {idx} - Prov Keys: {list(pic.prov.keys())}")
+                                        if 'page' in pic.prov:
+                                            logger.info(f"Bild {idx} - Prov.page: {pic.prov.get('page')}")
+                                        if 'page_index' in pic.prov:
+                                            logger.info(f"Bild {idx} - Prov.page_index: {pic.prov.get('page_index')}")
+                                # Prüfe auch content_layer für BBox und Image
+                                if hasattr(pic, 'content_layer'):
+                                    logger.info(f"Bild {idx} - Content Layer vorhanden: {type(pic.content_layer)}")
+                                    if hasattr(pic.content_layer, 'bbox'):
+                                        logger.info(f"Bild {idx} - Content Layer BBox: {pic.content_layer.bbox}")
+                                    if hasattr(pic.content_layer, 'image'):
+                                        logger.info(f"Bild {idx} - Content Layer Image: {type(pic.content_layer.image) if pic.content_layer.image else None}")
+                                    if hasattr(pic.content_layer, 'data'):
+                                        logger.info(f"Bild {idx} - Content Layer Data: {type(pic.content_layer.data) if pic.content_layer.data else None}")
+                                # Prüfe get_image() direkt
+                                if hasattr(pic, 'get_image') and callable(pic.get_image):
+                                    try:
+                                        test_img = pic.get_image()
+                                        logger.info(f"Bild {idx} - get_image() Ergebnis: {type(test_img) if test_img else None}")
+                                    except Exception as e:
+                                        logger.info(f"Bild {idx} - get_image() Fehler: {str(e)}")
                     # Prüfe auch pages
                     if hasattr(result.document, 'pages'):
                         if isinstance(result.document.pages, dict):
@@ -228,13 +253,24 @@ class DoclingService:
                     
                     # Iteriere über Seiten
                     for idx, page_key in enumerate(page_keys):
-                        i = int(page_key)  # Seiten-Index (0, 1, 2, ...)
+                        i = int(page_key)  # Seiten-Key (kann 0, 1, 2, ... oder 1, 2, 3, ... sein)
                         if isinstance(result.document.pages, dict):
                             page = result.document.pages[page_key]  # Page-Objekt
                         else:
                             page = result.document.pages[idx] if pages_are_objects else i
-                        # Verwende den entsprechenden Markdown-Teil (idx für korrekte Reihenfolge)
-                        page_markdown = markdown_parts[idx] if idx < len(markdown_parts) else full_markdown
+                        
+                        # Berechne den Markdown-Index: Wenn Keys bei 1 beginnen, mappe auf 0-basierten Index
+                        # Keys: [1, 2] -> markdown_index: [0, 1]
+                        # Keys: [0, 1] -> markdown_index: [0, 1]
+                        if page_keys and min(page_keys) > 0:
+                            # Keys beginnen bei 1 oder höher, mappe auf 0-basierten Index
+                            markdown_index = i - min(page_keys)
+                        else:
+                            # Keys beginnen bei 0
+                            markdown_index = i
+                        
+                        # Verwende den entsprechenden Markdown-Teil
+                        page_markdown = markdown_parts[markdown_index] if 0 <= markdown_index < len(markdown_parts) else full_markdown
                         
                         # Dimensions-Informationen (falls verfügbar)
                         dimensions = None
@@ -403,26 +439,41 @@ class DoclingService:
                                         if hasattr(img, 'get_image') and callable(img.get_image):
                                             try:
                                                 image_data = img.get_image()
-                                                logger.info(f"Bild über get_image() extrahiert")
+                                                if image_data is not None:
+                                                    logger.info(f"Bild über get_image() extrahiert: {type(image_data)}")
+                                                else:
+                                                    logger.debug(f"get_image() gab None zurück")
                                             except Exception as e:
                                                 logger.debug(f"get_image() fehlgeschlagen: {str(e)}")
                                         
                                         # 2. Direktes image Attribut
                                         if image_data is None and hasattr(img, 'image') and img.image:
                                             image_data = img.image
-                                            logger.info(f"Bild über image-Attribut extrahiert")
+                                            logger.info(f"Bild über image-Attribut extrahiert: {type(image_data)}")
                                         
-                                        # 3. Bilddaten als Bytes
+                                        # 3. content_layer.image (PictureItem hat oft content_layer)
+                                        if image_data is None and hasattr(img, 'content_layer') and img.content_layer:
+                                            if hasattr(img.content_layer, 'image') and img.content_layer.image:
+                                                image_data = img.content_layer.image
+                                                logger.info(f"Bild über content_layer.image extrahiert: {type(image_data)}")
+                                            elif hasattr(img.content_layer, 'data') and img.content_layer.data:
+                                                image_data = Image.open(BytesIO(img.content_layer.data))
+                                                logger.info(f"Bild über content_layer.data extrahiert")
+                                        
+                                        # 4. Bilddaten als Bytes
                                         if image_data is None and hasattr(img, 'data') and img.data:
                                             image_data = Image.open(BytesIO(img.data))
                                             logger.info(f"Bild über data-Attribut extrahiert")
                                         
-                                        # 4. Bildpfad
+                                        # 5. Bildpfad
                                         if image_data is None and hasattr(img, 'path') and img.path:
-                                            image_data = Image.open(img.path)
-                                            logger.info(f"Bild über path-Attribut extrahiert")
+                                            try:
+                                                image_data = Image.open(img.path)
+                                                logger.info(f"Bild über path-Attribut extrahiert")
+                                            except Exception as e:
+                                                logger.debug(f"Fehler beim Öffnen des Bildpfads: {str(e)}")
                                         
-                                        # 5. meta.path oder meta.src
+                                        # 6. meta.path oder meta.src
                                         if image_data is None and hasattr(img, 'meta') and img.meta:
                                             if isinstance(img.meta, dict):
                                                 path = img.meta.get('path') or img.meta.get('src')
@@ -430,8 +481,19 @@ class DoclingService:
                                                     try:
                                                         image_data = Image.open(path)
                                                         logger.info(f"Bild über meta.path/meta.src extrahiert")
-                                                    except:
-                                                        pass
+                                                    except Exception as e:
+                                                        logger.debug(f"Fehler beim Öffnen von meta.path: {str(e)}")
+                                        
+                                        # 7. prov.path oder prov.src (Provenance)
+                                        if image_data is None and hasattr(img, 'prov') and img.prov:
+                                            if isinstance(img.prov, dict):
+                                                path = img.prov.get('path') or img.prov.get('src') or img.prov.get('file')
+                                                if path:
+                                                    try:
+                                                        image_data = Image.open(path)
+                                                        logger.info(f"Bild über prov.path/prov.src extrahiert")
+                                                    except Exception as e:
+                                                        logger.debug(f"Fehler beim Öffnen von prov.path: {str(e)}")
                                         
                                         if image_data:
                                             buffered = BytesIO()
