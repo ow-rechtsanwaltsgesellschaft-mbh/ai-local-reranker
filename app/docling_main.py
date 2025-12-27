@@ -31,6 +31,7 @@ class ConvertRequest(BaseModel):
     file_path: Optional[str] = Field(None, description="Pfad zur Datei (optional, wenn file_bytes verwendet wird)")
     output_format: str = Field("markdown", description="Ausgabeformat: markdown, json, text")
     filename: Optional[str] = Field(None, description="Dateiname (für Format-Erkennung bei file_bytes)")
+    include_images_base64: bool = Field(False, description="Bilder als Base64 kodieren (wie Mistral OCR)")
 
 
 class PageData(BaseModel):
@@ -86,7 +87,8 @@ async def health():
 @app.post("/docling/v1/convert", response_model=ConvertResponse)
 async def convert_document(
     file: UploadFile = File(..., description="Zu konvertierende Datei"),
-    output_format: str = Form("markdown", description="Ausgabeformat: markdown, json, text")
+    output_format: str = Form("markdown", description="Ausgabeformat: markdown, json, text"),
+    include_images_base64: bool = Form(False, description="Bilder als Base64 kodieren (wie Mistral OCR)")
 ):
     """
     Konvertiert ein hochgeladenes Dokument in ein strukturiertes Format.
@@ -117,7 +119,8 @@ async def convert_document(
         result = await docling_service.convert_from_bytes(
             file_bytes=file_bytes,
             filename=filename,
-            output_format=output_format
+            output_format=output_format,
+            include_images_base64=include_images_base64
         )
         
         if not result.get("success"):
@@ -170,7 +173,8 @@ async def convert_document_from_path(
         # Konvertierung durchführen
         result = await docling_service.convert_document(
             file_path=request.file_path,
-            output_format=request.output_format
+            output_format=request.output_format,
+            include_images_base64=request.include_images_base64
         )
         
         if not result.get("success"):

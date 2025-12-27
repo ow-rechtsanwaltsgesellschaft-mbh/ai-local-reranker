@@ -72,7 +72,8 @@ class DoclingService:
     async def convert_document(
         self,
         file_path: str,
-        output_format: str = "markdown"
+        output_format: str = "markdown",
+        include_images_base64: bool = False
     ) -> Dict[str, Any]:
         """
         Konvertiert ein Dokument in ein strukturiertes Format.
@@ -172,7 +173,27 @@ class DoclingService:
                                 img_data = {}
                                 if hasattr(img, 'bbox'):
                                     img_data["bbox"] = list(img.bbox) if img.bbox else []
-                                # Base64-Kodierung würde hier implementiert werden, falls Bilder verfügbar sind
+                                
+                                # Base64-Kodierung (falls aktiviert)
+                                if include_images_base64:
+                                    try:
+                                        import base64
+                                        from io import BytesIO
+                                        from PIL import Image
+                                        
+                                        # Versuche, das Bild zu extrahieren und zu kodieren
+                                        if hasattr(img, 'image') and img.image:
+                                            # Konvertiere PIL Image zu Base64
+                                            buffered = BytesIO()
+                                            img.image.save(buffered, format="PNG")
+                                            img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                                            img_data["base64"] = img_base64
+                                        elif hasattr(img, 'data') and img.data:
+                                            # Falls Bilddaten direkt verfügbar sind
+                                            img_data["base64"] = base64.b64encode(img.data).decode('utf-8')
+                                    except Exception as e:
+                                        logger.warning(f"Fehler beim Base64-Kodieren des Bildes: {str(e)}")
+                                
                                 images.append(img_data)
                         
                         page_info = {
@@ -222,7 +243,8 @@ class DoclingService:
         self,
         file_bytes: bytes,
         filename: str,
-        output_format: str = "markdown"
+        output_format: str = "markdown",
+        include_images_base64: bool = False
     ) -> Dict[str, Any]:
         """
         Konvertiert ein Dokument aus Bytes in ein strukturiertes Format.
@@ -244,7 +266,7 @@ class DoclingService:
             tmp_path = tmp_file.name
         
         try:
-            result = await self.convert_document(tmp_path, output_format)
+            result = await self.convert_document(tmp_path, output_format, include_images_base64)
             return result
         finally:
             # Temporäre Datei löschen
