@@ -110,7 +110,7 @@ async def health():
 async def convert_document(
     file: UploadFile = File(..., description="Zu konvertierende Datei"),
     output_format: str = Form("markdown", description="Ausgabeformat: markdown, json, text"),
-    include_images_base64: bool = Form(False, description="Bilder als Base64 kodieren (wie Mistral OCR)")
+    include_images_base64: str = Form("false", description="Bilder als Base64 kodieren (wie Mistral OCR): 'true' oder 'false'")
 ):
     """
     Konvertiert ein hochgeladenes Dokument in ein strukturiertes Format.
@@ -133,6 +133,12 @@ async def convert_document(
                 detail="Docling-Service ist noch nicht initialisiert. Bitte versuchen Sie es später erneut."
             )
         
+        # Konvertiere include_images_base64 von String zu Boolean
+        include_images_base64_bool = include_images_base64.lower() in ("true", "1", "yes", "on")
+        
+        # Debug-Logging
+        logger.info(f"Request-Parameter - output_format: '{output_format}', include_images_base64 (String): '{include_images_base64}', include_images_base64 (Boolean): {include_images_base64_bool}")
+        
         # Datei lesen
         file_bytes = await file.read()
         filename = file.filename or "document"
@@ -142,7 +148,7 @@ async def convert_document(
             file_bytes=file_bytes,
             filename=filename,
             output_format=output_format,
-            include_images_base64=include_images_base64
+            include_images_base64=include_images_base64_bool
         )
         
         if not result.get("success"):
@@ -190,6 +196,9 @@ async def convert_document_from_path(
     Hinweis: Funktioniert nur, wenn der Dateipfad innerhalb des Containers erreichbar ist.
     """
     try:
+        # Debug-Logging
+        logger.info(f"Request-Parameter - output_format: '{request.output_format}', include_images_base64: {request.include_images_base64}")
+        
         if not docling_service.is_initialized():
             raise HTTPException(
                 status_code=503,

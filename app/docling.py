@@ -210,6 +210,9 @@ class DoclingService:
                     logger.warning(f"Fehler beim Extrahieren des gesamten Markdowns: {str(e)}")
                     full_markdown = ""
                 
+                # DEBUG: Prüfe include_images_base64
+                logger.info(f"include_images_base64 Parameter: {include_images_base64}")
+                
                 # Seiteninformationen im Mistral OCR Format extrahieren
                 pages_data = []
                 if hasattr(result.document, 'pages') and result.document.pages:
