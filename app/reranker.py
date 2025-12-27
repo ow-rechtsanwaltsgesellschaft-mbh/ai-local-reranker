@@ -13,6 +13,16 @@ from app.models import RerankResult
 
 logger = logging.getLogger(__name__)
 
+
+def get_hf_token() -> Optional[str]:
+    """
+    Liest den Hugging Face Token aus Umgebungsvariablen.
+    
+    Returns:
+        HF Token oder None
+    """
+    return os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+
 # Prüfe ob Qwen-Modell
 def is_qwen_model(model_name: str) -> bool:
     """Prüft ob es sich um ein Qwen3-Reranker-Modell handelt."""
@@ -152,8 +162,12 @@ class RerankerService:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Lade Qwen3-Reranker-Modell: {target_model_name} auf {device}")
             
+            # HF Token für private Modelle
+            hf_token = get_hf_token()
+            token_kwargs = {"token": hf_token} if hf_token else {}
+            
             # Tokenizer laden
-            tokenizer = AutoTokenizer.from_pretrained(target_model_name)
+            tokenizer = AutoTokenizer.from_pretrained(target_model_name, **token_kwargs)
             
             # Padding für decoder-only Modelle (Pflicht)
             if tokenizer.pad_token is None:
@@ -165,11 +179,13 @@ class RerankerService:
                 model = AutoModelForSequenceClassification.from_pretrained(
                     target_model_name,
                     torch_dtype=torch.bfloat16,
-                    device_map=device
+                    device_map=device,
+                    **token_kwargs
                 ).eval()
             else:
                 model = AutoModelForSequenceClassification.from_pretrained(
-                    target_model_name
+                    target_model_name,
+                    **token_kwargs
                 ).eval()
             
             # WICHTIG: auch im Model-Config setzen
@@ -291,10 +307,17 @@ class RerankerService:
                 else:
                     # CrossEncoder erkennt automatisch GPU, wenn verfügbar
                     # Zerank-Modelle benötigen trust_remote_code=True
+                    hf_token = get_hf_token()
                     if "zerank" in self.model_name.lower():
-                        self.model = CrossEncoder(self.model_name, trust_remote_code=True)
+                        if hf_token:
+                            self.model = CrossEncoder(self.model_name, trust_remote_code=True, token=hf_token)
+                        else:
+                            self.model = CrossEncoder(self.model_name, trust_remote_code=True)
                     else:
-                        self.model = CrossEncoder(self.model_name)
+                        if hf_token:
+                            self.model = CrossEncoder(self.model_name, token=hf_token)
+                        else:
+                            self.model = CrossEncoder(self.model_name)
                     
                     # Konfiguriere Tokenizer für spezielle Modelle
                     self._configure_tokenizer(self.model)

@@ -256,6 +256,7 @@ Oder in der `docker-compose.yml`:
 ```yaml
 environment:
   - RERANKER_MODEL=balanced  # oder "fast", "accurate" oder direkter Modellname
+  - HF_TOKEN=your_hf_token_here  # Optional: Für private Modelle
 ```
 
 #### Lokale Entwicklung
@@ -263,6 +264,9 @@ environment:
 ```bash
 # Umgebungsvariable setzen
 export RERANKER_MODEL=balanced
+
+# Hugging Face Token für private Modelle (optional)
+export HF_TOKEN=your_hf_token_here
 
 # Server starten
 uvicorn app.main:app --reload

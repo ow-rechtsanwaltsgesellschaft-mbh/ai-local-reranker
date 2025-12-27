@@ -40,6 +40,15 @@
       {
         "key": "PYTHONUNBUFFERED",
         "value": "1"
+      },
+      {
+        "key": "HF_TOKEN",
+        "input": {
+          "name": "Hugging Face Token",
+          "type": "string",
+          "description": "Hugging Face Token für private Modelle (optional)",
+          "default": ""
+        }
       }
     ]
   }

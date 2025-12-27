@@ -11,6 +11,8 @@ services:
       # Reranker-Modell auswählen: "fast", "balanced", "accurate" oder direkter Modellname
       # Standard: "fast" (cross-encoder/ms-marco-MiniLM-L-6-v2)
       - RERANKER_MODEL=${RERANKER_MODEL:-fast}
+      # Hugging Face Token für private Modelle (optional)
+      - HF_TOKEN=${HF_TOKEN:-}
     volumes:
       # Cache für Modelle (optional, beschleunigt nachfolgende Starts)
       - model-cache:/root/.cache

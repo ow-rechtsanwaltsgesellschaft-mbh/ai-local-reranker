@@ -12,6 +12,16 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
+def get_hf_token() -> Optional[str]:
+    """
+    Liest den Hugging Face Token aus Umgebungsvariablen.
+    
+    Returns:
+        HF Token oder None
+    """
+    return os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+
 # Verfügbare Embedding-Modelle
 AVAILABLE_EMBEDDING_MODELS = {
     "bge-large": "BAAI/bge-large",
@@ -153,7 +163,14 @@ class EmbeddingsService:
                     model_to_use = EmbeddingsService._model_cache[resolved_model_name]
                 else:
                     logger.info(f"Lade temporäres Embedding-Modell: {resolved_model_name}")
-                    temp_model = SentenceTransformer(resolved_model_name)
+                    hf_token = get_hf_token()
+                    if hf_token:
+                        temp_model = SentenceTransformer(
+                            resolved_model_name,
+                            token=hf_token
+                        )
+                    else:
+                        temp_model = SentenceTransformer(resolved_model_name)
                     EmbeddingsService._model_cache[resolved_model_name] = temp_model
                     model_to_use = temp_model
         elif not self.model:
