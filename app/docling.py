@@ -119,6 +119,22 @@ class DoclingService:
                 processing_time = time.time() - start_time
                 logger.debug(f"Dokument konvertiert in {processing_time:.2f}s")
                 
+                # DEBUG: Prüfe die Struktur des result-Objekts
+                logger.info(f"Result-Typ: {type(result)}")
+                logger.info(f"Result-Attribute: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+                if hasattr(result, 'document'):
+                    logger.info(f"Document-Attribute: {[attr for attr in dir(result.document) if not attr.startswith('_')]}")
+                    if hasattr(result.document, 'images'):
+                        img_count = len(result.document.images) if result.document.images else 0
+                        logger.info(f"Anzahl Bilder im Dokument: {img_count}")
+                        if result.document.images and len(result.document.images) > 0:
+                            for idx, img in enumerate(result.document.images[:3]):  # Erste 3 Bilder
+                                logger.info(f"Bild {idx} - Typ: {type(img)}, Attribute: {[attr for attr in dir(img) if not attr.startswith('_')]}")
+                                if hasattr(img, 'bbox'):
+                                    logger.info(f"Bild {idx} - BBox: {img.bbox}")
+                                if hasattr(img, 'page'):
+                                    logger.info(f"Bild {idx} - Page: {img.page}")
+                
                 # Dokument-Metadaten extrahieren
                 metadata = {}
                 try:
@@ -205,53 +221,65 @@ class DoclingService:
                         # Bilder extrahieren (falls verfügbar)
                         images = []
                         try:
-                            # Debug: Prüfe verfügbare Attribute
-                            logger.debug(f"Seite {i} - Verfügbare Attribute: {dir(page)}")
+                            # Debug: Prüfe verfügbare Attribute (INFO statt DEBUG für Sichtbarkeit)
+                            logger.info(f"Seite {i} - Verfügbare Attribute: {[attr for attr in dir(page) if not attr.startswith('_')]}")
                             
                             # Versuche verschiedene Quellen für Bilder
                             page_images = []
                             
-                            # 1. Prüfe page.images
-                            if hasattr(page, 'images') and page.images:
-                                logger.debug(f"Seite {i} - Gefundene Bilder in page.images: {len(page.images)}")
-                                page_images.extend(page.images)
-                            
-                            # 2. Prüfe page.content für Bilder
-                            if hasattr(page, 'content') and page.content:
-                                logger.debug(f"Seite {i} - page.content vorhanden: {type(page.content)}")
-                                if hasattr(page.content, 'images') and page.content.images:
-                                    logger.debug(f"Seite {i} - Gefundene Bilder in page.content.images: {len(page.content.images)}")
-                                    page_images.extend(page.content.images)
-                            
-                            # 3. Prüfe das gesamte Dokument für seiten-spezifische Bilder
+                            # 1. Prüfe result.document.images (gesamtes Dokument) - PRIORITÄT
                             if hasattr(result.document, 'images') and result.document.images:
-                                logger.debug(f"Seite {i} - Gefundene Bilder im Dokument: {len(result.document.images)}")
+                                logger.info(f"Seite {i} - Gefundene Bilder im Dokument: {len(result.document.images)}")
                                 # Filtere Bilder, die zu dieser Seite gehören
                                 for doc_img in result.document.images:
+                                    logger.info(f"Bild-Attribute: {[attr for attr in dir(doc_img) if not attr.startswith('_')]}")
                                     # Prüfe, ob das Bild zu dieser Seite gehört (z.B. über bbox)
                                     if hasattr(doc_img, 'page') and doc_img.page == i:
+                                        logger.info(f"Bild gehört zu Seite {i} (page-Attribut)")
                                         page_images.append(doc_img)
                                     elif hasattr(doc_img, 'bbox'):
                                         # Prüfe, ob bbox innerhalb der Seiten-Bbox liegt
                                         if hasattr(page, 'bbox') and page.bbox:
                                             page_bbox = page.bbox
                                             img_bbox = doc_img.bbox
+                                            logger.info(f"Bild-BBox: {img_bbox}, Seiten-BBox: {page_bbox}")
                                             # Einfache Überlappungsprüfung
                                             if (img_bbox[1] >= page_bbox[1] and img_bbox[1] <= page_bbox[3]):
+                                                logger.info(f"Bild gehört zu Seite {i} (BBox-Überlappung)")
                                                 page_images.append(doc_img)
+                                    else:
+                                        # Füge alle Bilder hinzu, wenn keine Seitenzuordnung möglich
+                                        logger.info(f"Bild ohne Seitenzuordnung hinzugefügt")
+                                        page_images.append(doc_img)
+                            
+                            # 2. Prüfe page.images
+                            if hasattr(page, 'images') and page.images:
+                                logger.info(f"Seite {i} - Gefundene Bilder in page.images: {len(page.images)}")
+                                page_images.extend(page.images)
+                            
+                            # 3. Prüfe page.content für Bilder
+                            if hasattr(page, 'content') and page.content:
+                                logger.info(f"Seite {i} - page.content vorhanden: {type(page.content)}")
+                                if hasattr(page.content, 'images') and page.content.images:
+                                    logger.info(f"Seite {i} - Gefundene Bilder in page.content.images: {len(page.content.images)}")
+                                    page_images.extend(page.content.images)
                             
                             # 4. Prüfe page.items für Bilder
                             if hasattr(page, 'items') and page.items:
-                                logger.debug(f"Seite {i} - Gefundene Items: {len(page.items)}")
+                                logger.info(f"Seite {i} - Gefundene Items: {len(page.items)}")
                                 for item in page.items:
-                                    if hasattr(item, 'type') and 'image' in str(item.type).lower():
-                                        logger.debug(f"Seite {i} - Bild gefunden in items (type): {item.type}")
+                                    item_type = str(type(item))
+                                    logger.info(f"Seite {i} - Item-Typ: {item_type}")
+                                    if hasattr(item, 'type'):
+                                        logger.info(f"Seite {i} - Item-Type-Attribut: {item.type}")
+                                    if 'image' in item_type.lower() or 'picture' in item_type.lower():
+                                        logger.info(f"Seite {i} - Bild gefunden in items")
                                         page_images.append(item)
-                                    elif hasattr(item, '__class__') and 'image' in str(item.__class__).lower():
-                                        logger.debug(f"Seite {i} - Bild gefunden in items (class): {item.__class__}")
+                                    elif hasattr(item, 'type') and 'image' in str(item.type).lower():
+                                        logger.info(f"Seite {i} - Bild gefunden in items (type): {item.type}")
                                         page_images.append(item)
                             
-                            logger.debug(f"Seite {i} - Gesamt gefundene Bilder: {len(page_images)}")
+                            logger.info(f"Seite {i} - Gesamt gefundene Bilder: {len(page_images)}")
                             
                             # Verarbeite gefundene Bilder
                             for img in page_images:
