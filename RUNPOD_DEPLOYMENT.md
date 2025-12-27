@@ -17,7 +17,7 @@ Anleitung zur Bereitstellung der AI Local Reranker API auf RunPod.
 docker build -f Dockerfile.runpod -t your-dockerhub-username/ai-local-reranker:latest .
 
 # Optional: Lokal testen (benötigt NVIDIA Docker)
-docker run --gpus all -p 8000:8000 \
+docker run --gpus all -p 8888:8888 \
   -e RERANKER_MODEL=bge-v2 \
   your-dockerhub-username/ai-local-reranker:latest
 ```
@@ -47,7 +47,7 @@ docker push your-dockerhub-username/ai-local-reranker:latest
    - **Container Disk**: `20 GB` (für Modelle)
    - **Volume**: `10 GB` (für Model-Cache)
    - **Volume Mount Path**: `/root/.cache`
-   - **Port**: `8000/http`
+   - **Port**: `8888/http`
    - **Environment Variables**:
      - `RERANKER_MODEL=bge-v2` (oder gewünschtes Modell)
      - `PYTHONUNBUFFERED=1`
@@ -65,7 +65,7 @@ runpod create_template \
   --container-disk 20 \
   --volume 10 \
   --volume-mount-path "/root/.cache" \
-  --ports "8000/http" \
+  --ports "8888/http" \
   --env "RERANKER_MODEL=bge-v2" \
   --env "PYTHONUNBUFFERED=1"
 ```
