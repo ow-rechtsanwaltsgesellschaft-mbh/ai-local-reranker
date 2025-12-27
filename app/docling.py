@@ -46,24 +46,11 @@ class DoclingService:
         """Lädt die Docling-Pipeline."""
         try:
             from docling.document_converter import DocumentConverter
-            from docling.datamodel.base_models import InputFormat
             
             logger.info("Initialisiere Docling-Pipeline...")
             
-            # Konfiguration für Docling
-            config = {
-                "doctr_model": "db_resnet50",  # OCR-Modell
-                "tables": {
-                    "detection_mode": "auto",
-                    "structure_mode": "auto"
-                }
-            }
-            
-            # Pipeline erstellen
-            self.pipeline = DocumentConverter(
-                format=InputFormat.AUTO,
-                **config
-            )
+            # Pipeline erstellen (ohne spezifische Konfiguration, verwendet Standardeinstellungen)
+            self.pipeline = DocumentConverter()
             
             self._initialized = True
             logger.info("Docling-Pipeline erfolgreich initialisiert")
@@ -74,6 +61,8 @@ class DoclingService:
             raise
         except Exception as e:
             logger.error(f"Fehler beim Initialisieren der Docling-Pipeline: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             raise
     
     def is_initialized(self) -> bool:
