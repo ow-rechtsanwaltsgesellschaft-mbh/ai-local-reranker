@@ -33,7 +33,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     CUDA_VISIBLE_DEVICES=0 \
-    TORCH_DEVICE=cuda
+    TORCH_DEVICE=cuda \
+    HF_HUB_ENABLE_HF_TRANSFER=1
 
 # App-Code kopieren
 COPY app/ ./app/
