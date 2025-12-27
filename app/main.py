@@ -1,29 +1,36 @@
 """
-FastAPI-Anwendung für lokales Reranking auf CPU.
-Verwendet sentence-transformers CrossEncoder für effizientes Reranking.
-Kompatibel mit Cohere Rerank API Format.
+FastAPI-Anwendung für lokales Reranking und Embeddings.
+Modular aufgebaut mit separaten Services für Reranking und Embeddings.
+Kompatibel mit Cohere Rerank API und OpenAI Embeddings API.
 """
 import uuid
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Union, Union
 import logging
 from app.reranker import RerankerService
-from app.models import RerankResult, Meta, ApiVersion, BilledUnits
+from app.embeddings import EmbeddingsService
+from app.models import (
+    RerankResult, Meta, ApiVersion, BilledUnits,
+    EmbeddingResponse, EmbeddingData, EmbeddingUsage
+)
 
 # Logging konfigurieren
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="AI Local Reranker API",
-    description="Lokale Reranking-API für CPU-basierte Neuordnung von Dokumenten (Cohere-kompatibel)",
+    title="AI Local Reranker & Embeddings API",
+    description="Lokale Reranking- und Embeddings-API (Cohere- und OpenAI-kompatibel)",
     version="1.0.0"
 )
 
-# Reranker-Service initialisieren
+# Services initialisieren
 reranker_service = RerankerService()
+embeddings_service = EmbeddingsService()
 
+
+# ===== Reranker Request/Response Models =====
 
 class RerankRequest(BaseModel):
     """Request-Modell für Reranking (Cohere-kompatibel)."""
@@ -40,20 +47,33 @@ class RerankResponse(BaseModel):
     meta: Meta
 
 
+# ===== Embeddings Request Model =====
+
+class EmbeddingRequest(BaseModel):
+    """Request-Modell für Embeddings (OpenAI-Format)."""
+    input: Union[str, List[str]] = Field(..., description="Text oder Liste von Texten zum Embedden")
+    model: Optional[str] = Field(None, description="Modellname (optional, wird aus URL verwendet wenn nicht angegeben)")
+
+
+# ===== Startup Event =====
+
 @app.on_event("startup")
 async def startup_event():
-    """Initialisiert den Reranker beim Start."""
-    logger.info("Initialisiere Reranker-Service...")
+    """Lädt die Modelle beim Start."""
+    logger.info("Starte Services...")
     await reranker_service.initialize()
-    logger.info("Reranker-Service erfolgreich initialisiert")
+    await embeddings_service.initialize()
+    logger.info("Alle Services bereit!")
 
+
+# ===== Health & Info Endpoints =====
 
 @app.get("/")
 async def root():
     """Health-Check Endpoint."""
     return {
         "status": "online",
-        "service": "AI Local Reranker API",
+        "service": "AI Local Reranker & Embeddings API",
         "version": "1.0.0"
     }
 
@@ -61,33 +81,46 @@ async def root():
 @app.get("/health")
 async def health():
     """Detaillierter Health-Check."""
-    cached_models = reranker_service.get_cached_models()
+    cached_reranker_models = reranker_service.get_cached_models()
+    cached_embedding_models = embeddings_service.get_cached_models()
     return {
         "status": "healthy",
         "reranker_loaded": reranker_service.is_loaded(),
-        "model_name": reranker_service.get_model_name(),
-        "cached_models": cached_models,
-        "cache_size": len(cached_models)
+        "reranker_model": reranker_service.get_model_name(),
+        "embeddings_loaded": embeddings_service.is_loaded(),
+        "embeddings_model": embeddings_service.get_model_name(),
+        "cached_reranker_models": cached_reranker_models,
+        "cached_embedding_models": cached_embedding_models
     }
 
 
 @app.get("/model/info")
 async def model_info():
-    """Informationen über das verwendete Modell."""
+    """Informationen über die verwendeten Modelle."""
     from app.reranker import AVAILABLE_MODELS
+    from app.embeddings import AVAILABLE_EMBEDDING_MODELS
     
     return {
-        "current_model": reranker_service.get_model_name(),
-        "available_models": {
-            alias: model_name 
-            for alias, model_name in AVAILABLE_MODELS.items() 
-            if alias != "default"
+        "reranker": {
+            "current_model": reranker_service.get_model_name(),
+            "available_models": {
+                alias: model_name 
+                for alias, model_name in AVAILABLE_MODELS.items() 
+                if alias != "default"
+            }
         },
-        "note": "Verwenden Sie die Umgebungsvariable RERANKER_MODEL, um das Modell zu ändern. "
-                "Mögliche Werte: 'fast', 'balanced', 'bge-v2', 'bge-large', 'zerank-1', 'zerank-1-small', "
-                "'qwen3-0.6b', 'qwen3-4b', 'qwen3-8b', 'bert-german' oder direkter Modellname von HuggingFace."
+        "embeddings": {
+            "current_model": embeddings_service.get_model_name(),
+            "available_models": {
+                alias: model_name 
+                for alias, model_name in AVAILABLE_EMBEDDING_MODELS.items() 
+                if alias != "default"
+            }
+        }
     }
 
+
+# ===== Reranker Endpoints (Cohere-Format) =====
 
 @app.post("/v1/rerank", response_model=RerankResponse)
 async def rerank(request: RerankRequest):
@@ -144,6 +177,111 @@ async def rerank(request: RerankRequest):
         raise HTTPException(status_code=500, detail=f"Interner Serverfehler: {str(e)}")
 
 
+# ===== Embeddings Endpoints (OpenAI-Format) =====
+
+@app.post("/v1/embeddings", response_model=EmbeddingResponse)
+@app.post("/v1/{model_name}/embeddings", response_model=EmbeddingResponse)
+async def create_embeddings(
+    request: EmbeddingRequest,
+    model_name: Optional[str] = Path(None, description="Modellname aus URL")
+):
+    """
+    Erstellt Embeddings für einen Text oder eine Liste von Texten (OpenAI-Format).
+    
+    Der Modellname kann über die URL (/v1/{model_name}/embeddings) oder im Request-Body angegeben werden.
+    URL-Parameter hat Priorität.
+    
+    Unterstützte Modelle:
+    - bge-large: BAAI/bge-large
+    - bge-base: BAAI/bge-base
+    - jina-de: jinaai/jina-embeddings-v2-base-de
+    - smollm3-de: mayflowergmbh/smollm3-3b-german-embed
+    
+    Beispiele:
+    - POST /v1/embeddings (verwendet Standard-Modell)
+    - POST /v1/bge-large/embeddings (verwendet BAAI/bge-large)
+    - POST /v1/jina-de/embeddings (verwendet jinaai/jina-embeddings-v2-base-de)
+    
+    Args:
+        request: EmbeddingRequest mit input (Text oder Liste) und optional model
+        model_name: Modellname aus URL-Parameter
+        
+    Returns:
+        EmbeddingResponse im OpenAI-Format
+    """
+    try:
+        # Bestimme Modellname (URL-Parameter hat Priorität)
+        final_model_name = model_name or request.model
+        
+        # Normalisiere input zu Liste
+        if isinstance(request.input, str):
+            texts = [request.input]
+        else:
+            texts = request.input
+        
+        if not texts:
+            raise HTTPException(status_code=400, detail="Input darf nicht leer sein")
+        
+        # Erstelle Embeddings
+        embeddings = await embeddings_service.embed(
+            texts=texts,
+            model_name=final_model_name
+        )
+        
+        # Erstelle Response im OpenAI-Format
+        embedding_data = [
+            EmbeddingData(
+                object="embedding",
+                embedding=emb,
+                index=i
+            )
+            for i, emb in enumerate(embeddings)
+        ]
+        
+        # Verwende Modellname für Response
+        used_model = final_model_name or embeddings_service.get_model_name()
+        
+        # Schätze Token-Usage (vereinfacht: ~1 Token pro Wort)
+        total_tokens = sum(len(text.split()) for text in texts)
+        
+        return EmbeddingResponse(
+            object="list",
+            data=embedding_data,
+            model=used_model,
+            usage=EmbeddingUsage(
+                prompt_tokens=total_tokens,
+                total_tokens=total_tokens
+            )
+        )
+    
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen von Embeddings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Interner Serverfehler: {str(e)}")
+
+
+@app.get("/v1/models")
+async def list_models():
+    """
+    Listet verfügbare Embedding-Modelle auf (OpenAI-Format).
+    """
+    from app.embeddings import AVAILABLE_EMBEDDING_MODELS
+    
+    models = []
+    for alias, model_id in AVAILABLE_EMBEDDING_MODELS.items():
+        if alias != "default":
+            models.append({
+                "id": model_id,
+                "object": "model",
+                "created": 1677610602,  # Placeholder timestamp
+                "owned_by": "local"
+            })
+    
+    return {
+        "object": "list",
+        "data": models
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
@@ -153,4 +291,3 @@ if __name__ == "__main__":
         timeout_keep_alive=120,
         timeout_graceful_shutdown=120
     )
-
