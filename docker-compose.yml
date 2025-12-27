@@ -31,6 +31,38 @@ services:
         reservations:
           cpus: '1.0'
 
+  docling-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-local-docling
+    ports:
+      - "8890:8890"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Hugging Face Token für private Modelle (optional)
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      # Cache für Modelle (optional, beschleunigt nachfolgende Starts)
+      - model-cache:/root/.cache
+      # Optional: Volume für Dokumente
+      - ./documents:/app/documents:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8890/docling/health')"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 180s
+    command: ["uvicorn", "app.docling_main:app", "--host", "0.0.0.0", "--port", "8890", "--timeout-keep-alive", "120", "--timeout-graceful-shutdown", "120"]
+    # CPU-Limits (optional, für Ressourcen-Management)
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+        reservations:
+          cpus: '1.0'
+
 volumes:
   model-cache:
     driver: local

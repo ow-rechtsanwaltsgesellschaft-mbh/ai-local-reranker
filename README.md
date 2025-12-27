@@ -8,6 +8,7 @@ Eine modulare Python-API für lokales Reranking und Embeddings auf CPU/GPU mit F
 
 - 🚀 **Lokales Reranking auf CPU/GPU** - Keine externe API erforderlich
 - 🔤 **Lokale Embeddings** - OpenAI-kompatible Embeddings-API
+- 📄 **Dokumentenverarbeitung** - Docling-API für PDF, Word, etc. (Port 8890)
 - ⚡ **Schnell und effizient** - Optimiert für CPU- und GPU-Performance
 - 🐳 **Docker-ready** - Einfache Bereitstellung mit Docker Compose
 - ☁️ **RunPod-ready** - GPU-optimiertes Deployment auf RunPod
@@ -43,24 +44,33 @@ docker-compose logs -f
 docker-compose down
 ```
 
-Die API ist dann unter `http://localhost:8888` erreichbar.
+Die APIs sind dann unter folgenden URLs erreichbar:
+- **Reranker & Embeddings API**: `http://localhost:8888`
+- **Docling Document Processing API**: `http://localhost:8890`
 
 ### API-Dokumentation
 
 Nach dem Start können Sie die interaktive API-Dokumentation unter folgenden URLs aufrufen:
 
+**Reranker & Embeddings API (Port 8888):**
 - **Swagger UI**: http://localhost:8888/docs
 - **ReDoc**: http://localhost:8888/redoc
 
+**Docling API (Port 8890):**
+- **Swagger UI**: http://localhost:8890/docs
+- **ReDoc**: http://localhost:8890/redoc
+
 ## API-Endpoints
 
-### Health Check
+### Reranker & Embeddings API (Port 8888)
+
+#### Health Check
 
 ```bash
 GET /health
 ```
 
-### Modell-Informationen
+#### Modell-Informationen
 
 ```bash
 GET /model/info
@@ -94,6 +104,66 @@ Beide Endpoints listen verfügbare Modelle im OpenAI-Format auf (Reranker und Em
   ]
 }
 ```
+
+### Docling Document Processing API (Port 8890)
+
+#### Health Check
+
+```bash
+GET http://localhost:8890/docling/health
+```
+
+#### Dokumentenkonvertierung
+
+```bash
+POST http://localhost:8890/docling/v1/convert
+Content-Type: multipart/form-data
+```
+
+**Request:**
+- `file`: Datei (PDF, DOCX, DOC, TXT, etc.)
+- `output_format`: Ausgabeformat (`markdown`, `json`, `text`) - Standard: `markdown`
+
+**Beispiel mit curl:**
+```bash
+curl -X POST "http://localhost:8890/docling/v1/convert" \
+  -F "file=@document.pdf" \
+  -F "output_format=markdown"
+```
+
+#### Dokumentenkonvertierung von Dateipfad
+
+```bash
+POST http://localhost:8890/docling/v1/convert/path
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "file_path": "/app/documents/document.pdf",
+  "output_format": "markdown"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "content": "# Dokumenttitel\n\nInhalt des Dokuments...",
+  "metadata": {
+    "file_path": "document.pdf",
+    "format": "markdown",
+    "pages": 5,
+    "tables": 2
+  },
+  "error": null
+}
+```
+
+**Unterstützte Formate:**
+- **Eingabe:** PDF, DOCX, DOC, TXT, HTML, und weitere von Docling unterstützte Formate
+- **Ausgabe:** Markdown, JSON, Text
 
 ## Reranking API (Cohere-kompatibel)
 
@@ -222,10 +292,13 @@ Oder für mehrere Texte:
 
 | Alias | Modellname | Größe | Geschwindigkeit | Genauigkeit | Empfohlen für |
 |-------|------------|-------|-----------------|-------------|---------------|
-| `bge-base` | `BAAI/bge-base-en-v1.5` | ~130 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Standard**, englische Texte, beste Balance |
-| `bge-large` | `BAAI/bge-large-en-v1.5` | ~335 MB | ⚡ Langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Höchste Genauigkeit, englische Texte |
-| `jina-de` | `jinaai/jina-embeddings-v2-base-de` | ~130 MB | ⚡⚡ Schnell | ⭐⭐⭐⭐⭐ Ausgezeichnet | **Deutsche Texte**, mehrsprachig |
-| `smollm3-de` | `mayflowergmbh/smollm3-3b-german-embed` | ~6 GB | ⚡⚡⚡ Sehr langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend | Deutsche Texte, sehr große Dimensionen |
+| Kurzname     | HuggingFace-Modell                              | Größe   | Geschwindigkeit | Qualität                  | Einsatz                                   | Dimensionen |
+|--------------|------------------------------------------------|---------|-----------------|---------------------------|-------------------------------------------|-------------|
+| `bge-base`   | `BAAI/bge-base-en-v1.5`                         | ~130 MB | ⚡⚡ Schnell     | ⭐⭐⭐⭐⭐ Ausgezeichnet       | **Standard**, englische Texte, beste Balance | **768**     |
+| `bge-large`  | `BAAI/bge-large-en-v1.5`                        | ~335 MB | ⚡ Langsam      | ⭐⭐⭐⭐⭐⭐ Hervorragend      | Höchste Genauigkeit, englische Texte        | **1024**    |
+| `jina-de`    | `jinaai/jina-embeddings-v2-base-de`             | ~130 MB | ⚡⚡ Schnell     | ⭐⭐⭐⭐⭐ Ausgezeichnet       | **Deutsche Texte**, mehrsprachig            | **768**     |
+| `smollm3-de` | `mayflowergmbh/smollm3-3b-german-embed`         | ~6 GB   | ⚡⚡⚡ Sehr langsam | ⭐⭐⭐⭐⭐⭐ Hervorragend    | Deutsche Texte, sehr große Dimensionen      | **4096**    |
+
 
 **Standard:** `bge-base` (BAAI/bge-base-en-v1.5)
 
@@ -424,7 +497,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8888
 python test_api.py
 ```
 
-Die API ist dann unter `http://localhost:8888` erreichbar.
+Die APIs sind dann unter folgenden URLs erreichbar:
+- **Reranker & Embeddings API**: `http://localhost:8888`
+- **Docling Document Processing API**: `http://localhost:8890`
 
 ## Modell-Konfiguration
 
