@@ -121,19 +121,26 @@ class DoclingService:
                 
                 # DEBUG: Prüfe die Struktur des result-Objekts
                 logger.info(f"Result-Typ: {type(result)}")
-                logger.info(f"Result-Attribute: {[attr for attr in dir(result) if not attr.startswith('_')]}")
                 if hasattr(result, 'document'):
                     logger.info(f"Document-Attribute: {[attr for attr in dir(result.document) if not attr.startswith('_')]}")
-                    if hasattr(result.document, 'images'):
-                        img_count = len(result.document.images) if result.document.images else 0
-                        logger.info(f"Anzahl Bilder im Dokument: {img_count}")
-                        if result.document.images and len(result.document.images) > 0:
-                            for idx, img in enumerate(result.document.images[:3]):  # Erste 3 Bilder
-                                logger.info(f"Bild {idx} - Typ: {type(img)}, Attribute: {[attr for attr in dir(img) if not attr.startswith('_')]}")
-                                if hasattr(img, 'bbox'):
-                                    logger.info(f"Bild {idx} - BBox: {img.bbox}")
-                                if hasattr(img, 'page'):
-                                    logger.info(f"Bild {idx} - Page: {img.page}")
+                    # Prüfe pictures (nicht images!)
+                    if hasattr(result.document, 'pictures'):
+                        pic_count = len(result.document.pictures) if result.document.pictures else 0
+                        logger.info(f"Anzahl Bilder (pictures) im Dokument: {pic_count}")
+                        if result.document.pictures and len(result.document.pictures) > 0:
+                            for idx, pic in enumerate(result.document.pictures[:3]):  # Erste 3 Bilder
+                                logger.info(f"Bild {idx} - Typ: {type(pic)}, Attribute: {[attr for attr in dir(pic) if not attr.startswith('_')]}")
+                                if hasattr(pic, 'bbox'):
+                                    logger.info(f"Bild {idx} - BBox: {pic.bbox}")
+                                if hasattr(pic, 'page'):
+                                    logger.info(f"Bild {idx} - Page: {pic.page}")
+                                elif hasattr(pic, 'page_index'):
+                                    logger.info(f"Bild {idx} - Page Index: {pic.page_index}")
+                    # Prüfe auch pages
+                    if hasattr(result.document, 'pages'):
+                        logger.info(f"Anzahl Seiten: {len(result.document.pages) if result.document.pages else 0}")
+                        if result.document.pages and len(result.document.pages) > 0:
+                            logger.info(f"Erste Seite - Typ: {type(result.document.pages[0])}, Wert: {result.document.pages[0]}")
                 
                 # Dokument-Metadaten extrahieren
                 metadata = {}
@@ -170,6 +177,10 @@ class DoclingService:
                     total_pages = len(result.document.pages)
                     logger.debug(f"Gefundene Seiten: {total_pages}")
                     
+                    # Prüfe, ob pages tatsächlich Page-Objekte sind oder nur Zahlen
+                    first_page = result.document.pages[0] if result.document.pages else None
+                    pages_are_objects = first_page and not isinstance(first_page, (int, float))
+                    
                     # Versuche, den Markdown-Inhalt nach Seiten aufzuteilen
                     # Docling fügt manchmal Seitenumbrüche ein, die wir nutzen können
                     markdown_parts = []
@@ -200,7 +211,9 @@ class DoclingService:
                     while len(markdown_parts) < total_pages:
                         markdown_parts.append("")
                     
-                    for i, page in enumerate(result.document.pages):
+                    # Iteriere über Seiten - pages könnte Page-Objekte oder Zahlen sein
+                    for i in range(total_pages):
+                        page = result.document.pages[i] if pages_are_objects else i
                         # Verwende den entsprechenden Markdown-Teil
                         page_markdown = markdown_parts[i] if i < len(markdown_parts) else full_markdown
                         
@@ -221,62 +234,57 @@ class DoclingService:
                         # Bilder extrahieren (falls verfügbar)
                         images = []
                         try:
-                            # Debug: Prüfe verfügbare Attribute (INFO statt DEBUG für Sichtbarkeit)
-                            logger.info(f"Seite {i} - Verfügbare Attribute: {[attr for attr in dir(page) if not attr.startswith('_')]}")
-                            
                             # Versuche verschiedene Quellen für Bilder
                             page_images = []
                             
-                            # 1. Prüfe result.document.images (gesamtes Dokument) - PRIORITÄT
-                            if hasattr(result.document, 'images') and result.document.images:
-                                logger.info(f"Seite {i} - Gefundene Bilder im Dokument: {len(result.document.images)}")
+                            # 1. Prüfe result.document.pictures (gesamtes Dokument) - PRIORITÄT
+                            # Docling verwendet 'pictures' statt 'images'!
+                            if hasattr(result.document, 'pictures') and result.document.pictures:
+                                logger.info(f"Seite {i} - Gefundene Bilder (pictures) im Dokument: {len(result.document.pictures)}")
                                 # Filtere Bilder, die zu dieser Seite gehören
-                                for doc_img in result.document.images:
-                                    logger.info(f"Bild-Attribute: {[attr for attr in dir(doc_img) if not attr.startswith('_')]}")
-                                    # Prüfe, ob das Bild zu dieser Seite gehört (z.B. über bbox)
-                                    if hasattr(doc_img, 'page') and doc_img.page == i:
-                                        logger.info(f"Bild gehört zu Seite {i} (page-Attribut)")
-                                        page_images.append(doc_img)
-                                    elif hasattr(doc_img, 'bbox'):
-                                        # Prüfe, ob bbox innerhalb der Seiten-Bbox liegt
-                                        if hasattr(page, 'bbox') and page.bbox:
-                                            page_bbox = page.bbox
-                                            img_bbox = doc_img.bbox
-                                            logger.info(f"Bild-BBox: {img_bbox}, Seiten-BBox: {page_bbox}")
-                                            # Einfache Überlappungsprüfung
-                                            if (img_bbox[1] >= page_bbox[1] and img_bbox[1] <= page_bbox[3]):
-                                                logger.info(f"Bild gehört zu Seite {i} (BBox-Überlappung)")
-                                                page_images.append(doc_img)
-                                    else:
-                                        # Füge alle Bilder hinzu, wenn keine Seitenzuordnung möglich
-                                        logger.info(f"Bild ohne Seitenzuordnung hinzugefügt")
-                                        page_images.append(doc_img)
+                                for pic in result.document.pictures:
+                                    # Prüfe, ob das Bild zu dieser Seite gehört
+                                    pic_page = None
+                                    if hasattr(pic, 'page'):
+                                        pic_page = pic.page
+                                    elif hasattr(pic, 'page_index'):
+                                        pic_page = pic.page_index
+                                    elif hasattr(pic, 'page_num'):
+                                        pic_page = pic.page_num
+                                    
+                                    if pic_page is not None and pic_page == i:
+                                        logger.info(f"Bild gehört zu Seite {i} (page-Attribut: {pic_page})")
+                                        page_images.append(pic)
+                                    elif pic_page is None:
+                                        # Wenn keine Seitenzuordnung, versuche über BBox
+                                        if hasattr(pic, 'bbox') and pic.bbox:
+                                            # Für jetzt: füge alle Bilder ohne Seitenzuordnung hinzu
+                                            # Später können wir BBox-basierte Zuordnung implementieren
+                                            logger.info(f"Bild ohne Seitenzuordnung, aber mit BBox: {pic.bbox}")
+                                            page_images.append(pic)
+                                        else:
+                                            logger.info(f"Bild ohne Seitenzuordnung hinzugefügt")
+                                            page_images.append(pic)
                             
-                            # 2. Prüfe page.images
-                            if hasattr(page, 'images') and page.images:
+                            # 2. Prüfe page.images (falls page ein Objekt ist)
+                            if pages_are_objects and hasattr(page, 'images') and page.images:
                                 logger.info(f"Seite {i} - Gefundene Bilder in page.images: {len(page.images)}")
                                 page_images.extend(page.images)
                             
-                            # 3. Prüfe page.content für Bilder
-                            if hasattr(page, 'content') and page.content:
+                            # 3. Prüfe page.content für Bilder (falls page ein Objekt ist)
+                            if pages_are_objects and hasattr(page, 'content') and page.content:
                                 logger.info(f"Seite {i} - page.content vorhanden: {type(page.content)}")
                                 if hasattr(page.content, 'images') and page.content.images:
                                     logger.info(f"Seite {i} - Gefundene Bilder in page.content.images: {len(page.content.images)}")
                                     page_images.extend(page.content.images)
                             
-                            # 4. Prüfe page.items für Bilder
-                            if hasattr(page, 'items') and page.items:
+                            # 4. Prüfe page.items für Bilder (falls page ein Objekt ist)
+                            if pages_are_objects and hasattr(page, 'items') and page.items:
                                 logger.info(f"Seite {i} - Gefundene Items: {len(page.items)}")
                                 for item in page.items:
                                     item_type = str(type(item))
-                                    logger.info(f"Seite {i} - Item-Typ: {item_type}")
-                                    if hasattr(item, 'type'):
-                                        logger.info(f"Seite {i} - Item-Type-Attribut: {item.type}")
                                     if 'image' in item_type.lower() or 'picture' in item_type.lower():
                                         logger.info(f"Seite {i} - Bild gefunden in items")
-                                        page_images.append(item)
-                                    elif hasattr(item, 'type') and 'image' in str(item.type).lower():
-                                        logger.info(f"Seite {i} - Bild gefunden in items (type): {item.type}")
                                         page_images.append(item)
                             
                             logger.info(f"Seite {i} - Gesamt gefundene Bilder: {len(page_images)}")
@@ -286,15 +294,22 @@ class DoclingService:
                                 img_data = {}
                                 
                                 # Bounding Box extrahieren
+                                bbox = None
                                 if hasattr(img, 'bbox') and img.bbox:
-                                    img_data["bbox"] = list(img.bbox) if img.bbox else []
+                                    bbox = list(img.bbox) if img.bbox else []
                                 elif hasattr(img, 'bounds') and img.bounds:
-                                    img_data["bbox"] = list(img.bounds) if img.bounds else []
+                                    bbox = list(img.bounds) if img.bounds else []
                                 elif hasattr(img, 'rect') and img.rect:
                                     # Konvertiere rect zu bbox
                                     rect = img.rect
                                     if hasattr(rect, 'x') and hasattr(rect, 'y') and hasattr(rect, 'width') and hasattr(rect, 'height'):
-                                        img_data["bbox"] = [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height]
+                                        bbox = [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height]
+                                    elif isinstance(rect, (list, tuple)) and len(rect) >= 4:
+                                        bbox = list(rect)
+                                
+                                if bbox:
+                                    img_data["bbox"] = bbox
+                                    logger.info(f"Bild-BBox extrahiert: {bbox}")
                                 
                                 # Base64-Kodierung (falls aktiviert)
                                 if include_images_base64:
