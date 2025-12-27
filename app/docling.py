@@ -184,7 +184,8 @@ class DoclingService:
                 if hasattr(result.document, 'pages') and result.document.pages:
                     # pages könnte ein Dictionary oder eine Liste sein
                     if isinstance(result.document.pages, dict):
-                        page_keys = sorted([k for k in result.document.pages.keys() if isinstance(k, (int, float))])
+                        # Sortiere Keys numerisch (0, 1, 2, ...) für korrekte Reihenfolge
+                        page_keys = sorted([k for k in result.document.pages.keys() if isinstance(k, (int, float))], key=lambda x: float(x))
                         total_pages = len(page_keys)
                         logger.debug(f"Gefundene Seiten (Dict): {total_pages}, Keys: {page_keys}")
                         pages_are_objects = True
@@ -265,9 +266,26 @@ class DoclingService:
                                     pic_page = None
                                     
                                     # Versuche verschiedene Wege, die Seitenzuordnung zu finden
-                                    if hasattr(pic, 'meta') and pic.meta:
+                                    # 1. Prüfe prov (Provenance) zuerst - das ist oft die zuverlässigste Quelle
+                                    if hasattr(pic, 'prov') and pic.prov:
+                                        try:
+                                            if isinstance(pic.prov, dict):
+                                                pic_page = pic.prov.get('page') or pic.prov.get('page_index') or pic.prov.get('page_num')
+                                            elif hasattr(pic.prov, 'page'):
+                                                pic_page = pic.prov.page
+                                            elif hasattr(pic.prov, 'page_index'):
+                                                pic_page = pic.prov.page_index
+                                        except:
+                                            pass
+                                    
+                                    # 2. Prüfe meta
+                                    if pic_page is None and hasattr(pic, 'meta') and pic.meta:
                                         if isinstance(pic.meta, dict):
                                             pic_page = pic.meta.get('page') or pic.meta.get('page_index') or pic.meta.get('page_num')
+                                        elif hasattr(pic.meta, 'page'):
+                                            pic_page = pic.meta.page
+                                    
+                                    # 3. Prüfe direkte Attribute
                                     if pic_page is None:
                                         if hasattr(pic, 'page'):
                                             pic_page = pic.page
@@ -291,9 +309,28 @@ class DoclingService:
                                                 logger.info(f"Bild gehört zu Seite {i} (page-Attribut: {pic_page})")
                                                 page_images.append(pic)
                                     else:
-                                        # Wenn keine Seitenzuordnung, versuche über BBox oder füge alle hinzu
-                                        logger.info(f"Bild ohne Seitenzuordnung - wird allen Seiten hinzugefügt")
-                                        page_images.append(pic)
+                                        # Wenn keine Seitenzuordnung, prüfe über prov (Provenance)
+                                        if hasattr(pic, 'prov') and pic.prov:
+                                            try:
+                                                # prov könnte Seiteninformationen enthalten
+                                                if isinstance(pic.prov, dict):
+                                                    prov_page = pic.prov.get('page') or pic.prov.get('page_index')
+                                                    if prov_page is not None:
+                                                        try:
+                                                            if int(prov_page) == int(i):
+                                                                logger.info(f"Bild gehört zu Seite {i} (prov.page: {prov_page})")
+                                                                page_images.append(pic)
+                                                        except:
+                                                            pass
+                                            except:
+                                                pass
+                                        
+                                        # Wenn immer noch keine Zuordnung, füge zu allen Seiten hinzu (Fallback)
+                                        # Aber nur, wenn wir noch keine Bilder für diese Seite haben
+                                        if pic not in page_images:
+                                            # Fallback: Füge Bild zu allen Seiten hinzu, wenn keine Zuordnung möglich
+                                            logger.info(f"Bild ohne Seitenzuordnung - wird Seite {i} hinzugefügt (Fallback)")
+                                            page_images.append(pic)
                             
                             # 2. Prüfe page.images (falls page ein Objekt ist)
                             if pages_are_objects and hasattr(page, 'images') and page.images:
@@ -324,6 +361,8 @@ class DoclingService:
                                 
                                 # Bounding Box extrahieren
                                 bbox = None
+                                
+                                # Prüfe verschiedene Quellen für BBox
                                 if hasattr(img, 'bbox') and img.bbox:
                                     bbox = list(img.bbox) if img.bbox else []
                                 elif hasattr(img, 'bounds') and img.bounds:
@@ -336,9 +375,19 @@ class DoclingService:
                                     elif isinstance(rect, (list, tuple)) and len(rect) >= 4:
                                         bbox = list(rect)
                                 
+                                # Prüfe auch meta für BBox
+                                if bbox is None and hasattr(img, 'meta') and img.meta:
+                                    if isinstance(img.meta, dict):
+                                        bbox = img.meta.get('bbox') or img.meta.get('bounds') or img.meta.get('rect')
+                                        if bbox and isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+                                            bbox = list(bbox)
+                                    
                                 if bbox:
                                     img_data["bbox"] = bbox
                                     logger.info(f"Bild-BBox extrahiert: {bbox}")
+                                else:
+                                    # Auch ohne BBox hinzufügen, wenn Base64 vorhanden ist
+                                    logger.debug(f"Keine BBox für Bild gefunden")
                                 
                                 # Base64-Kodierung (falls aktiviert)
                                 if include_images_base64:
@@ -404,9 +453,10 @@ class DoclingService:
                                         import traceback
                                         logger.debug(traceback.format_exc())
                                 
-                                # Nur hinzufügen, wenn mindestens bbox oder base64 vorhanden
-                                if img_data.get("bbox") or img_data.get("base64"):
-                                    images.append(img_data)
+                                # Immer hinzufügen, auch wenn nur BBox oder nur Base64 vorhanden ist
+                                # Oder wenn weder noch (für Debugging)
+                                images.append(img_data)
+                                logger.info(f"Bild hinzugefügt: bbox={img_data.get('bbox') is not None}, base64={img_data.get('base64') is not None}")
                         
                         except Exception as e:
                             logger.debug(f"Fehler beim Extrahieren der Bilder von Seite {i}: {str(e)}")
@@ -486,7 +536,7 @@ class DoclingService:
                             logger.warning(f"Fehler beim Extrahieren der Tabellen: {str(e)}")
                         
                         page_info = {
-                            "index": i,
+                            "index": idx,  # Verwende idx statt i für korrekte Reihenfolge
                             "markdown": page_markdown,
                             "dimensions": dimensions,
                             "images": images,
