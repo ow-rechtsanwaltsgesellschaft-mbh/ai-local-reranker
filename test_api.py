@@ -5,7 +5,7 @@ import requests
 import json
 
 # API-URL
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8888"
 
 def test_health():
     """Testet den Health-Check Endpoint."""

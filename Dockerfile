@@ -37,12 +37,12 @@ ENV PATH=/root/.local/bin:$PATH \
 COPY app/ ./app/
 
 # Port freigeben
-EXPOSE 8000
+EXPOSE 8888
 
 # Health-Check mit erhöhten Timeouts für Modell-Laden
 HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8888/health')" || exit 1
 
 # Uvicorn starten mit erhöhten Timeouts für große Modelle
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120", "--timeout-graceful-shutdown", "120"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8888", "--timeout-keep-alive", "120", "--timeout-graceful-shutdown", "120"]
 

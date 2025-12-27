@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: ai-local-reranker
     ports:
-      - "8000:8000"
+      - "8888:8888"
     environment:
       - PYTHONUNBUFFERED=1 
       # Reranker-Modell auswählen: "fast", "balanced", "accurate" oder direkter Modellname
@@ -16,7 +16,7 @@ services:
       - model-cache:/root/.cache
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8888/health')"]
       interval: 30s
       timeout: 30s
       retries: 3

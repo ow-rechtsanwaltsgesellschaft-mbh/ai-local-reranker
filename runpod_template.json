@@ -15,7 +15,7 @@
     }
   ],
   "dockerArgs": "",
-  "ports": "8000/http",
+  "ports": "8888/http",
   "startJupyter": false,
   "startSsh": false,
   "isPublic": false,

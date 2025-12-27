@@ -42,12 +42,12 @@ COPY app/ ./app/
 # RunPod Handler kopieren (muss im Arbeitsverzeichnis liegen)
 COPY handler.py ./handler.py
 
-# Port freigeben (RunPod verwendet Port 8000)
-EXPOSE 8000
+# Port freigeben (RunPod verwendet Port 8888)
+EXPOSE 8888
 
 # Health-Check mit erhöhten Timeouts für Modell-Laden
 HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8888/health')" || exit 1
 
 # Start-Script: Startet API im Hintergrund und Handler
 COPY .runpod/start.sh ./start.sh

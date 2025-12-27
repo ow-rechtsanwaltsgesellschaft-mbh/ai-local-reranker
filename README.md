@@ -40,14 +40,14 @@ docker-compose logs -f
 docker-compose down
 ```
 
-Die API ist dann unter `http://localhost:8000` erreichbar.
+Die API ist dann unter `http://localhost:8888` erreichbar.
 
 ### API-Dokumentation
 
 Nach dem Start können Sie die interaktive API-Dokumentation unter folgenden URLs aufrufen:
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: http://localhost:8888/docs
+- **ReDoc**: http://localhost:8888/redoc
 
 ## API-Endpoints
 
@@ -117,7 +117,7 @@ Content-Type: application/json
 ### Mit cURL
 
 ```bash
-curl -X POST "http://localhost:8000/rerank" \
+curl -X POST "http://localhost:8888/rerank" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "Python Programmierung",
@@ -136,7 +136,7 @@ curl -X POST "http://localhost:8000/rerank" \
 import requests
 
 response = requests.post(
-    "http://localhost:8000/rerank",
+    "http://localhost:8888/rerank",
     json={
         "query": "Python Programmierung",
         "documents": [
@@ -173,7 +173,7 @@ docs = [
 ]
 
 response = requests.post(
-    "http://localhost:8000/rerank",
+    "http://localhost:8888/rerank",
     json={
         "query": "What is the capital of the United States?",
         "documents": docs,
@@ -198,7 +198,7 @@ pip install -r requirements.txt
 pip install --index-url https://download.pytorch.org/whl/cpu torch
 
 # Server starten
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8888
 ```
 
 ### Schnellstart in der Konsole
@@ -208,13 +208,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # 2. API starten
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8888
 
 # 3. In einem anderen Terminal: API testen
 python test_api.py
 ```
 
-Die API ist dann unter `http://localhost:8000` erreichbar.
+Die API ist dann unter `http://localhost:8888` erreichbar.
 
 ## Modell-Konfiguration
 
@@ -272,7 +272,7 @@ uvicorn app.main:app --reload
 
 ```bash
 # Aktuelles Modell und verfügbare Optionen anzeigen
-curl http://localhost:8000/model/info
+curl http://localhost:8888/model/info
 ```
 
 ### Direkter Modellname
