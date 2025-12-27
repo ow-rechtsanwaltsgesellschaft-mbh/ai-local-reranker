@@ -506,24 +506,27 @@ class DoclingService:
                                         # WICHTIG: get_image() benötigt das document-Objekt als Parameter!
                                         if hasattr(img, 'get_image') and callable(img.get_image):
                                             try:
-                                                # Versuche mit document-Parameter
+                                                # Versuche mit document-Parameter (wie im Beispiel)
                                                 image_data = img.get_image(result.document)
                                                 if image_data is not None:
-                                                    logger.info(f"Bild über get_image(document) extrahiert: {type(image_data)}")
+                                                    logger.info(f"Seite {i} - Bild {img_idx} - Bild über get_image(document) extrahiert: {type(image_data)}, Größe: {image_data.size if hasattr(image_data, 'size') else 'N/A'}")
                                                 else:
-                                                    logger.debug(f"get_image(document) gab None zurück")
-                                            except TypeError:
+                                                    logger.warning(f"Seite {i} - Bild {img_idx} - get_image(document) gab None zurück")
+                                            except TypeError as te:
                                                 # Falls get_image() keinen Parameter benötigt
+                                                logger.debug(f"Seite {i} - Bild {img_idx} - get_image() benötigt keinen Parameter, versuche ohne: {str(te)}")
                                                 try:
                                                     image_data = img.get_image()
                                                     if image_data is not None:
-                                                        logger.info(f"Bild über get_image() extrahiert: {type(image_data)}")
+                                                        logger.info(f"Seite {i} - Bild {img_idx} - Bild über get_image() extrahiert: {type(image_data)}")
                                                     else:
-                                                        logger.debug(f"get_image() gab None zurück")
+                                                        logger.warning(f"Seite {i} - Bild {img_idx} - get_image() gab None zurück")
                                                 except Exception as e:
-                                                    logger.debug(f"get_image() fehlgeschlagen: {str(e)}")
+                                                    logger.warning(f"Seite {i} - Bild {img_idx} - get_image() fehlgeschlagen: {str(e)}")
                                             except Exception as e:
-                                                logger.debug(f"get_image(document) fehlgeschlagen: {str(e)}")
+                                                logger.warning(f"Seite {i} - Bild {img_idx} - get_image(document) fehlgeschlagen: {str(e)}")
+                                                import traceback
+                                                logger.debug(traceback.format_exc())
                                         
                                         # 2. Direktes image Attribut
                                         if image_data is None and hasattr(img, 'image') and img.image:
@@ -575,20 +578,39 @@ class DoclingService:
                                                         logger.debug(f"Fehler beim Öffnen von prov.path: {str(e)}")
                                         
                                         if image_data:
-                                            buffered = BytesIO()
-                                            # Konvertiere zu RGB falls nötig
-                                            if image_data.mode in ('RGBA', 'LA', 'P'):
-                                                rgb_image = Image.new('RGB', image_data.size, (255, 255, 255))
-                                                if image_data.mode == 'P':
-                                                    image_data = image_data.convert('RGBA')
-                                                rgb_image.paste(image_data, mask=image_data.split()[-1] if image_data.mode == 'RGBA' else None)
-                                                image_data = rgb_image
-                                            image_data.save(buffered, format="PNG")
-                                            img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-                                            img_data["base64"] = img_base64
-                                            logger.info(f"Bild erfolgreich als Base64 kodiert ({len(img_base64)} Zeichen)")
+                                            try:
+                                                buffered = BytesIO()
+                                                # Prüfe, ob image_data ein PIL Image ist
+                                                if not hasattr(image_data, 'save'):
+                                                    logger.warning(f"Seite {i} - Bild {img_idx} - image_data ist kein PIL Image: {type(image_data)}")
+                                                    # Versuche es zu konvertieren, falls es ein numpy array oder ähnliches ist
+                                                    if hasattr(image_data, 'shape'):
+                                                        # Numpy array
+                                                        image_data = Image.fromarray(image_data)
+                                                    else:
+                                                        image_data = None
+                                                
+                                                if image_data and hasattr(image_data, 'save'):
+                                                    # Konvertiere zu RGB falls nötig
+                                                    if hasattr(image_data, 'mode') and image_data.mode in ('RGBA', 'LA', 'P'):
+                                                        rgb_image = Image.new('RGB', image_data.size, (255, 255, 255))
+                                                        if image_data.mode == 'P':
+                                                            image_data = image_data.convert('RGBA')
+                                                        rgb_image.paste(image_data, mask=image_data.split()[-1] if image_data.mode == 'RGBA' else None)
+                                                        image_data = rgb_image
+                                                    
+                                                    image_data.save(buffered, format="PNG")
+                                                    img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                                                    img_data["base64"] = img_base64
+                                                    logger.info(f"Seite {i} - Bild {img_idx} - Bild erfolgreich als Base64 kodiert ({len(img_base64)} Zeichen)")
+                                                else:
+                                                    logger.warning(f"Seite {i} - Bild {img_idx} - Konnte Bild nicht als Base64 kodieren - kein gültiges PIL Image")
+                                            except Exception as e:
+                                                logger.warning(f"Seite {i} - Bild {img_idx} - Fehler beim Base64-Kodieren: {str(e)}")
+                                                import traceback
+                                                logger.debug(traceback.format_exc())
                                         else:
-                                            logger.warning(f"Konnte Bild nicht extrahieren - keine verfügbare Quelle")
+                                            logger.warning(f"Seite {i} - Bild {img_idx} - Konnte Bild nicht extrahieren - keine verfügbare Quelle")
                                     except Exception as e:
                                         logger.warning(f"Fehler beim Base64-Kodieren des Bildes: {str(e)}")
                                         import traceback
