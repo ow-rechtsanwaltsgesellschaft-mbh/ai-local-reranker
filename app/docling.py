@@ -202,12 +202,24 @@ class DoclingService:
                 except Exception as e:
                     logger.warning(f"Fehler beim Extrahieren der Metadaten: {str(e)}")
                 
-                # Zuerst das gesamte Dokument als Markdown extrahieren
+                # Zuerst das gesamte Dokument extrahieren (je nach output_format)
+                logger.info(f"output_format Parameter: {output_format}")
+                full_markdown = ""
                 try:
-                    full_markdown = result.document.export_to_markdown()
-                    logger.debug(f"Gesamtes Dokument extrahiert: {len(full_markdown)} Zeichen")
+                    if output_format.lower() == "json":
+                        # JSON-Format
+                        full_markdown = result.document.export_to_markdown()  # Docling hat kein export_to_json, verwende Markdown
+                        logger.debug(f"Gesamtes Dokument als JSON/Markdown extrahiert: {len(full_markdown)} Zeichen")
+                    elif output_format.lower() == "text":
+                        # Text-Format
+                        full_markdown = result.document.export_to_text()
+                        logger.debug(f"Gesamtes Dokument als Text extrahiert: {len(full_markdown)} Zeichen")
+                    else:
+                        # Markdown-Format (Standard)
+                        full_markdown = result.document.export_to_markdown()
+                        logger.debug(f"Gesamtes Dokument als Markdown extrahiert: {len(full_markdown)} Zeichen")
                 except Exception as e:
-                    logger.warning(f"Fehler beim Extrahieren des gesamten Markdowns: {str(e)}")
+                    logger.warning(f"Fehler beim Extrahieren des Dokuments: {str(e)}")
                     full_markdown = ""
                 
                 # DEBUG: Prüfe include_images_base64
