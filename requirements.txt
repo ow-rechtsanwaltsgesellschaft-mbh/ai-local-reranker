@@ -10,5 +10,6 @@ python-multipart==0.0.6
 requests>=2.31.0
 runpod>=1.0.0
 hf_transfer>=0.1.0
-docling>=1.0.0
+docling>=1.6.0
+docling-parse>=0.2.0,<0.3.0
 
