@@ -322,13 +322,26 @@ class DoclingService:
                                     # 1. Prüfe prov (Provenance) zuerst - das ist oft die zuverlässigste Quelle
                                     if hasattr(pic, 'prov') and pic.prov:
                                         try:
-                                            if isinstance(pic.prov, dict):
-                                                pic_page = pic.prov.get('page') or pic.prov.get('page_index') or pic.prov.get('page_num')
+                                            # prov kann eine Liste von ProvenanceItem-Objekten sein
+                                            if isinstance(pic.prov, list) and len(pic.prov) > 0:
+                                                # Nimm das erste ProvenanceItem
+                                                prov_item = pic.prov[0]
+                                                if hasattr(prov_item, 'page_no'):
+                                                    pic_page = prov_item.page_no
+                                                elif hasattr(prov_item, 'page'):
+                                                    pic_page = prov_item.page
+                                                elif hasattr(prov_item, 'page_index'):
+                                                    pic_page = prov_item.page_index
+                                            elif isinstance(pic.prov, dict):
+                                                pic_page = pic.prov.get('page') or pic.prov.get('page_index') or pic.prov.get('page_num') or pic.prov.get('page_no')
+                                            elif hasattr(pic.prov, 'page_no'):
+                                                pic_page = pic.prov.page_no
                                             elif hasattr(pic.prov, 'page'):
                                                 pic_page = pic.prov.page
                                             elif hasattr(pic.prov, 'page_index'):
                                                 pic_page = pic.prov.page_index
-                                        except:
+                                        except Exception as e:
+                                            logger.debug(f"Fehler beim Extrahieren der Seitenzuordnung aus prov: {str(e)}")
                                             pass
                                     
                                     # 2. Prüfe meta
@@ -419,6 +432,7 @@ class DoclingService:
                                 bbox = None
                                 
                                 # Prüfe verschiedene Quellen für BBox
+                                # 1. Direktes bbox-Attribut
                                 if hasattr(img, 'bbox') and img.bbox:
                                     bbox = list(img.bbox) if img.bbox else []
                                 elif hasattr(img, 'bounds') and img.bounds:
@@ -431,7 +445,27 @@ class DoclingService:
                                     elif isinstance(rect, (list, tuple)) and len(rect) >= 4:
                                         bbox = list(rect)
                                 
-                                # Prüfe auch meta für BBox
+                                # 2. Prüfe prov (Provenance) für BBox - WICHTIG: prov ist eine Liste von ProvenanceItem-Objekten
+                                if bbox is None and hasattr(img, 'prov') and img.prov:
+                                    try:
+                                        # prov kann eine Liste von ProvenanceItem-Objekten sein
+                                        if isinstance(img.prov, list) and len(img.prov) > 0:
+                                            # Nimm das erste ProvenanceItem
+                                            prov_item = img.prov[0]
+                                            if hasattr(prov_item, 'bbox') and prov_item.bbox:
+                                                # BoundingBox-Objekt hat l, t, r, b Attribute
+                                                if hasattr(prov_item.bbox, 'l') and hasattr(prov_item.bbox, 't') and hasattr(prov_item.bbox, 'r') and hasattr(prov_item.bbox, 'b'):
+                                                    bbox = [prov_item.bbox.l, prov_item.bbox.t, prov_item.bbox.r, prov_item.bbox.b]
+                                                elif isinstance(prov_item.bbox, (list, tuple)) and len(prov_item.bbox) >= 4:
+                                                    bbox = list(prov_item.bbox)
+                                        elif isinstance(img.prov, dict):
+                                            prov_bbox = img.prov.get('bbox') or img.prov.get('bounds')
+                                            if prov_bbox and isinstance(prov_bbox, (list, tuple)) and len(prov_bbox) >= 4:
+                                                bbox = list(prov_bbox)
+                                    except Exception as e:
+                                        logger.debug(f"Fehler beim Extrahieren der BBox aus prov: {str(e)}")
+                                
+                                # 3. Prüfe auch meta für BBox
                                 if bbox is None and hasattr(img, 'meta') and img.meta:
                                     if isinstance(img.meta, dict):
                                         bbox = img.meta.get('bbox') or img.meta.get('bounds') or img.meta.get('rect')
