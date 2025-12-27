@@ -61,7 +61,7 @@ def handler(event):
     2. Endpoint-basierter Request:
        {
          "input": {
-           "endpoint": "/rerank",
+           "endpoint": "/v1/rerank",
            "method": "POST",
            "body": {...}
          }
@@ -144,7 +144,7 @@ def handler(event):
             }
             
             response = requests.post(
-                f"{API_URL}/rerank",
+                f"{API_URL}/v1/rerank",
                 json=rerank_data,
                 timeout=180  # Erhöhtes Timeout für große Modelle
             )

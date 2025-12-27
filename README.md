@@ -68,7 +68,7 @@ Zeigt das aktuell verwendete Modell und verfügbare Optionen an.
 ### Reranking (Cohere-kompatibel)
 
 ```bash
-POST /rerank
+POST /v1/rerank
 Content-Type: application/json
 
 {
@@ -117,7 +117,7 @@ Content-Type: application/json
 ### Mit cURL
 
 ```bash
-curl -X POST "http://localhost:8888/rerank" \
+curl -X POST "http://localhost:8888/v1/rerank" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "Python Programmierung",
@@ -136,7 +136,7 @@ curl -X POST "http://localhost:8888/rerank" \
 import requests
 
 response = requests.post(
-    "http://localhost:8888/rerank",
+    "http://localhost:8888/v1/rerank",
     json={
         "query": "Python Programmierung",
         "documents": [
@@ -162,7 +162,7 @@ Das API-Format ist kompatibel mit Cohere, sodass Sie den Code nahezu unveränder
 
 ```python
 # Statt: co = cohere.ClientV2()
-# Verwenden Sie: requests.post("http://localhost:8000/rerank", ...)
+# Verwenden Sie: requests.post("http://localhost:8888/v1/rerank", ...)
 
 docs = [
     "Carson City is the capital city of the American state of Nevada.",
@@ -173,7 +173,7 @@ docs = [
 ]
 
 response = requests.post(
-    "http://localhost:8888/rerank",
+    "http://localhost:8888/v1/rerank",
     json={
         "query": "What is the capital of the United States?",
         "documents": docs,

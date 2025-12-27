@@ -89,7 +89,7 @@ async def model_info():
     }
 
 
-@app.post("/rerank", response_model=RerankResponse)
+@app.post("/v1/rerank", response_model=RerankResponse)
 async def rerank(request: RerankRequest):
     """
     Führt Reranking für eine Query und eine Liste von Dokumenten durch.

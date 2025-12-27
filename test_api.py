@@ -40,7 +40,7 @@ def test_rerank():
     }
     
     response = requests.post(
-        f"{API_URL}/rerank",
+        f"{API_URL}/v1/rerank",
         json=test_data
     )
     
