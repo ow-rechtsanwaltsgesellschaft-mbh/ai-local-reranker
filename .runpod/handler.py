@@ -2,7 +2,7 @@
 RunPod Serverless Handler für AI Local Reranker API.
 Dieser Handler ermöglicht die Verwendung der API auf RunPod Serverless.
 """
-import runpod
+import runpod  # Required
 import requests
 import json
 import time
@@ -17,13 +17,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 API_URL = "http://localhost:8000"
 MAX_WAIT_TIME = 180  # 3 Minuten für Modell-Laden
 
+# Globale Variable für API-Status
+_api_ready = False
+
 
 def wait_for_api(max_wait=MAX_WAIT_TIME):
     """Wartet bis die API verfügbar ist."""
+    global _api_ready
+    if _api_ready:
+        return True
+    
     for i in range(max_wait // 2):
         try:
             response = requests.get(f"{API_URL}/health", timeout=2)
             if response.status_code == 200:
+                _api_ready = True
                 return True
         except:
             pass
@@ -33,37 +41,48 @@ def wait_for_api(max_wait=MAX_WAIT_TIME):
     return False
 
 
-def handler(event: Dict[str, Any]) -> Dict[str, Any]:
+def handler(event):
     """
     RunPod Serverless Handler.
     
-    Unterstützt verschiedene Event-Formate:
+    Extrahiert Eingabedaten aus event["input"] und verarbeitet Rerank-Requests.
+    
+    Unterstützt folgende Input-Formate:
     1. Direkter Rerank-Request (Cohere-Format):
        {
-         "query": "What is machine learning?",
-         "documents": ["...", "..."],
-         "top_n": 3,
-         "model": "bge-v2"
+         "input": {
+           "query": "What is machine learning?",
+           "documents": ["...", "..."],
+           "top_n": 3,
+           "model": "bge-v2"
+         }
        }
     
     2. Endpoint-basierter Request:
        {
-         "endpoint": "/rerank",
-         "method": "POST",
-         "body": {...}
+         "input": {
+           "endpoint": "/rerank",
+           "method": "POST",
+           "body": {...}
+         }
        }
     
     3. Health-Check:
        {
-         "endpoint": "/health"
+         "input": {
+           "endpoint": "/health"
+         }
        }
     
     Args:
-        event: Event-Daten von RunPod
+        event: Event-Daten von RunPod mit "input" Key
         
     Returns:
         Response-Daten im Cohere-Format oder Error
     """
+    # Extract input data from the request
+    input_data = event.get("input", {})
+    
     # Warte auf API, falls sie noch startet
     if not wait_for_api():
         return {
@@ -72,7 +91,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         # Prüfe ob es ein Health-Check ist
-        if "endpoint" in event and event.get("endpoint") == "/health":
+        if "endpoint" in input_data and input_data.get("endpoint") == "/health":
             response = requests.get(f"{API_URL}/health", timeout=10)
             return {
                 "status": "success",
@@ -81,10 +100,10 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
             }
         
         # Standard: Rerank-Request
-        if "endpoint" in event:
-            endpoint = event["endpoint"]
-            method = event.get("method", "POST")
-            body = event.get("body", {})
+        if "endpoint" in input_data:
+            endpoint = input_data["endpoint"]
+            method = input_data.get("method", "POST")
+            body = input_data.get("body", {})
             
             if method == "GET":
                 response = requests.get(f"{API_URL}{endpoint}", timeout=30)
@@ -104,8 +123,8 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
                 }
         else:
             # Direkter Rerank-Request (Cohere-Format)
-            query = event.get("query", "")
-            documents = event.get("documents", [])
+            query = input_data.get("query", "")
+            documents = input_data.get("documents", [])
             
             if not query:
                 return {
@@ -120,8 +139,8 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
             rerank_data = {
                 "query": query,
                 "documents": documents,
-                "top_n": event.get("top_n"),
-                "model": event.get("model")
+                "top_n": input_data.get("top_n"),
+                "model": input_data.get("model")
             }
             
             response = requests.post(
@@ -153,6 +172,5 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # RunPod Handler registrieren
-if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler})
+runpod.serverless.start({"handler": handler})  # Required
 
