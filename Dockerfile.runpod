@@ -38,6 +38,9 @@ ENV PYTHONUNBUFFERED=1 \
 # App-Code kopieren
 COPY app/ ./app/
 
+# RunPod Handler kopieren
+COPY .runpod/handler.py ./handler.py
+
 # Port freigeben (RunPod verwendet Port 8000)
 EXPOSE 8000
 
@@ -45,6 +48,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-# Uvicorn starten mit erhöhten Timeouts für große Modelle
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120", "--timeout-graceful-shutdown", "120"]
+# Start-Script: Startet API im Hintergrund und Handler
+COPY .runpod/start.sh ./start.sh
+RUN chmod +x ./start.sh
+
+CMD ["./start.sh"]
 

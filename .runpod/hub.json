@@ -1,0 +1,47 @@
+{
+  "title": "AI Local Reranker",
+  "description": "Lokale Reranking-API für CPU/GPU mit FastAPI. Unterstützt CrossEncoder, BGE, Qwen3 und ZeroEntropy Reranker-Modelle. Cohere-kompatibel.",
+  "type": "serverless",
+  "category": "image",
+  "iconUrl": "https://raw.githubusercontent.com/runpod/runpod-templates/main/icons/fastapi.png",
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 20,
+    "presets": [
+      {
+        "name": "Fast (MiniLM-L-6)",
+        "defaults": {
+          "RERANKER_MODEL": "fast"
+        }
+      },
+      {
+        "name": "Balanced (BGE-v2)",
+        "defaults": {
+          "RERANKER_MODEL": "bge-v2"
+        }
+      },
+      {
+        "name": "Accurate (Qwen3-4B)",
+        "defaults": {
+          "RERANKER_MODEL": "qwen3-4b"
+        }
+      }
+    ],
+    "env": [
+      {
+        "key": "RERANKER_MODEL",
+        "input": {
+          "name": "Reranker Model",
+          "type": "string",
+          "description": "Modell-Alias oder direkter Modellname (fast, balanced, bge-v2, bge-large, qwen3-0.6b, qwen3-4b, qwen3-8b, zerank-1, zerank-1-small, bert-german)",
+          "default": "bge-v2"
+        }
+      },
+      {
+        "key": "PYTHONUNBUFFERED",
+        "value": "1"
+      }
+    ]
+  }
+}
+

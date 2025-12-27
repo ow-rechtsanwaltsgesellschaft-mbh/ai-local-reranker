@@ -1,10 +1,10 @@
 """
-Reranker-Service für lokales CPU-basiertes Reranking.
-Verwendet sentence-transformers CrossEncoder für optimale Performance.
+Reranker-Service für lokales CPU/GPU-basiertes Reranking.
+Unterstützt CrossEncoder und Qwen3-Reranker mit spezieller Behandlung.
 """
 import os
 from sentence_transformers import CrossEncoder
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +12,11 @@ import numpy as np
 from app.models import RerankResult
 
 logger = logging.getLogger(__name__)
+
+# Prüfe ob Qwen-Modell
+def is_qwen_model(model_name: str) -> bool:
+    """Prüft ob es sich um ein Qwen3-Reranker-Modell handelt."""
+    return "qwen" in model_name.lower() and "reranker" in model_name.lower()
 
 # Verfügbare Reranker-Modelle (von schnell/klein zu langsam/groß)
 AVAILABLE_MODELS = {
@@ -107,17 +112,19 @@ class RerankerService:
     """
     
     # Klassenweiter Cache für geladene Modelle (shared across instances)
-    _model_cache: dict[str, CrossEncoder] = {}
+    # Unterstützt sowohl CrossEncoder als auch Qwen-Modelle (tuple = (model, tokenizer, device))
+    _model_cache: dict[str, Union[CrossEncoder, tuple]] = {}
     
     def __init__(self, model_name: Optional[str] = None):
         """
         Initialisiert den Reranker-Service.
         
         Args:
-            model_name: Name des CrossEncoder-Modells (optional, überschreibt ENV-Variable)
+            model_name: Name des Modells (optional, überschreibt ENV-Variable)
         """
         self.model_name = resolve_model_name(model_name) if model_name else get_model_name()
-        self.model: Optional[CrossEncoder] = None
+        self.model: Optional[Union[CrossEncoder, tuple]] = None
+        self.is_qwen = is_qwen_model(self.model_name)
         self.executor = ThreadPoolExecutor(max_workers=2)
         self._loaded = False
     
@@ -125,6 +132,116 @@ class RerankerService:
         """Lädt das Modell asynchron."""
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(self.executor, self._load_model)
+    
+    def _load_qwen_model(self, model_name: Optional[str] = None):
+        """
+        Lädt ein Qwen3-Reranker-Modell mit AutoModelForSequenceClassification.
+        Qwen-Modelle benötigen spezielle Behandlung.
+        
+        Args:
+            model_name: Optionaler Modellname (Standard: self.model_name)
+        """
+        try:
+            import torch
+            from transformers import AutoTokenizer, AutoModelForSequenceClassification
+            
+            # Modellname bestimmen
+            target_model_name = model_name if model_name else self.model_name
+            
+            # Device bestimmen
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Lade Qwen3-Reranker-Modell: {target_model_name} auf {device}")
+            
+            # Tokenizer laden
+            tokenizer = AutoTokenizer.from_pretrained(target_model_name)
+            
+            # Padding für decoder-only Modelle (Pflicht)
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+                logger.debug("Pad-Token auf EOS-Token gesetzt")
+            
+            # Modell laden
+            if device == "cuda":
+                model = AutoModelForSequenceClassification.from_pretrained(
+                    target_model_name,
+                    torch_dtype=torch.bfloat16,
+                    device_map=device
+                ).eval()
+            else:
+                model = AutoModelForSequenceClassification.from_pretrained(
+                    target_model_name
+                ).eval()
+            
+            # WICHTIG: auch im Model-Config setzen
+            model.config.pad_token_id = tokenizer.pad_token_id
+            
+            logger.info(f"Qwen3-Reranker-Modell erfolgreich geladen auf {device}")
+            return model, tokenizer, device
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Laden des Qwen-Modells: {str(e)}")
+            raise
+    
+    async def _rerank_qwen(
+        self,
+        query: str,
+        documents: List[str],
+        model_data: tuple
+    ) -> List[float]:
+        """
+        Führt Reranking mit Qwen3-Reranker durch.
+        Verwendet das spezielle Instruction-Format.
+        
+        Args:
+            query: Die Suchanfrage
+            documents: Liste der Dokumente
+            model_data: Tuple (model, tokenizer, device)
+            
+        Returns:
+            Liste von Scores
+        """
+        import torch
+        model, tokenizer, device = model_data
+        
+        # Qwen3-korrektes Instruction-Format
+        # Wichtig: Qwen3-Reranker sind instruktionssensitiv.
+        # Ohne Instruction bewerten sie Stil statt Relevanz.
+        pairs = [
+            (
+                (
+                    "Given the query, judge whether the document is relevant.\n\n"
+                    f"Query: {query}\n"
+                    f"Document: {doc}\n"
+                    "Relevance:"
+                ),
+                ""
+            )
+            for doc in documents
+        ]
+        
+        # Tokenisieren (Batch) - in Thread-Pool ausführen
+        loop = asyncio.get_event_loop()
+        
+        def tokenize_and_score():
+            import torch
+            inputs = tokenizer(
+                pairs,
+                padding=True,
+                truncation=True,
+                return_tensors="pt"
+            ).to(device)
+            
+            # Forward-Pass
+            with torch.no_grad():
+                logits = model(**inputs).logits
+                # Qwen3-Reranker: logits.shape == (batch_size, 2)
+                # Index 1 = relevant
+                scores = logits[:, 1].cpu().numpy().tolist()
+            
+            return scores
+        
+        scores = await loop.run_in_executor(self.executor, tokenize_and_score)
+        return scores
     
     def _configure_tokenizer(self, model: CrossEncoder):
         """
@@ -167,15 +284,20 @@ class RerankerService:
                 except Exception:
                     logger.debug("Konnte GPU-Status nicht prüfen")
                 
-                # CrossEncoder erkennt automatisch GPU, wenn verfügbar
-                # Zerank-Modelle benötigen trust_remote_code=True
-                if "zerank" in self.model_name.lower():
-                    self.model = CrossEncoder(self.model_name, trust_remote_code=True)
+                # Qwen3-Modelle benötigen spezielle Behandlung
+                if self.is_qwen:
+                    model, tokenizer, device = self._load_qwen_model()
+                    self.model = (model, tokenizer, device)
                 else:
-                    self.model = CrossEncoder(self.model_name)
-                
-                # Konfiguriere Tokenizer für spezielle Modelle (z.B. Qwen)
-                self._configure_tokenizer(self.model)
+                    # CrossEncoder erkennt automatisch GPU, wenn verfügbar
+                    # Zerank-Modelle benötigen trust_remote_code=True
+                    if "zerank" in self.model_name.lower():
+                        self.model = CrossEncoder(self.model_name, trust_remote_code=True)
+                    else:
+                        self.model = CrossEncoder(self.model_name)
+                    
+                    # Konfiguriere Tokenizer für spezielle Modelle
+                    self._configure_tokenizer(self.model)
                 
                 # Speichere im Cache für zukünftige Verwendung
                 RerankerService._model_cache[self.model_name] = self.model
@@ -226,9 +348,13 @@ class RerankerService:
         """
         # Verwende temporäres Modell falls angegeben
         model_to_use = self.model
+        is_qwen_model_use = self.is_qwen
+        
         if model_name:
             # Löse Alias auf echten Modellnamen auf
             resolved_model_name = resolve_model_name(model_name)
+            is_qwen_model_use = is_qwen_model(resolved_model_name)
+            
             if resolved_model_name != self.model_name:
                 # Prüfe Cache zuerst
                 if resolved_model_name in RerankerService._model_cache:
@@ -236,34 +362,47 @@ class RerankerService:
                     model_to_use = RerankerService._model_cache[resolved_model_name]
                 else:
                     logger.info(f"Lade temporäres Modell: {resolved_model_name} (Alias: {model_name})")
-                    # Zerank-Modelle benötigen trust_remote_code=True
-                    if "zerank" in resolved_model_name.lower():
-                        temp_model = CrossEncoder(resolved_model_name, trust_remote_code=True)
+                    
+                    # Qwen-Modelle benötigen spezielle Behandlung
+                    if is_qwen_model_use:
+                        temp_model_data = self._load_qwen_model(resolved_model_name)
+                        model_to_use = temp_model_data
+                        RerankerService._model_cache[resolved_model_name] = temp_model_data
                     else:
-                        temp_model = CrossEncoder(resolved_model_name)
-                    
-                    # Konfiguriere Tokenizer für spezielle Modelle (z.B. Qwen)
-                    self._configure_tokenizer(temp_model)
-                    
-                    # Speichere im Cache
-                    RerankerService._model_cache[resolved_model_name] = temp_model
-                    model_to_use = temp_model
+                        # Zerank-Modelle benötigen trust_remote_code=True
+                        if "zerank" in resolved_model_name.lower():
+                            temp_model = CrossEncoder(resolved_model_name, trust_remote_code=True)
+                        else:
+                            temp_model = CrossEncoder(resolved_model_name)
+                        
+                        # Konfiguriere Tokenizer für spezielle Modelle
+                        self._configure_tokenizer(temp_model)
+                        
+                        # Speichere im Cache
+                        RerankerService._model_cache[resolved_model_name] = temp_model
+                        model_to_use = temp_model
         elif not self.model:
             raise RuntimeError("Modell ist nicht geladen. Bitte warten Sie auf die Initialisierung.")
         
         if not documents:
             return []
         
-        # Erstelle Query-Dokument-Paare für CrossEncoder
-        pairs = [[query, doc] for doc in documents]
-        
-        # Führe Scoring in Thread-Pool aus (nicht-blockierend)
-        loop = asyncio.get_event_loop()
-        scores = await loop.run_in_executor(
-            self.executor,
-            model_to_use.predict,
-            pairs
-        )
+        # Qwen-Modelle benötigen spezielle Behandlung
+        if is_qwen_model_use and isinstance(model_to_use, tuple):
+            # Qwen3-Reranker mit Instruction-Format
+            scores = await self._rerank_qwen(query, documents, model_to_use)
+        else:
+            # Standard CrossEncoder
+            # Erstelle Query-Dokument-Paare für CrossEncoder
+            pairs = [[query, doc] for doc in documents]
+            
+            # Führe Scoring in Thread-Pool aus (nicht-blockierend)
+            loop = asyncio.get_event_loop()
+            scores = await loop.run_in_executor(
+                self.executor,
+                model_to_use.predict,
+                pairs
+            )
         
         # Konvertiere zu numpy array für Verarbeitung
         scores_array = np.array(scores, dtype=np.float32)

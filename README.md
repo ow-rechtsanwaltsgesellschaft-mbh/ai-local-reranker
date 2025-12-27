@@ -1,6 +1,8 @@
 # AI Local Reranker API
 
-Eine Python-API für lokales Reranking auf CPU mit FastAPI und sentence-transformers.
+[![Runpod](https://api.runpod.io/badge/ow-rechtsanwaltsgesellschaft-mbh/ai-local-reranker)](https://console.runpod.io/hub/ow-rechtsanwaltsgesellschaft-mbh/ai-local-reranker)
+
+Eine Python-API für lokales Reranking auf CPU/GPU mit FastAPI und sentence-transformers.
 
 ## Features
 
@@ -300,8 +302,13 @@ RERANKER_MODEL=cross-encoder/stsb-roberta-base docker-compose up
 ├── Dockerfile.runpod     # GPU-optimiertes Dockerfile für RunPod
 ├── docker-compose.yml
 ├── requirements.txt
-├── runpod_template.json  # RunPod Template-Konfiguration
+├── runpod_template.json  # RunPod Template-Konfiguration (Legacy)
 ├── RUNPOD_DEPLOYMENT.md  # RunPod Deployment-Anleitung
+├── .runpod/
+│   ├── hub.json         # RunPod Hub-Konfiguration
+│   ├── tests.json       # RunPod Test-Konfiguration
+│   ├── handler.py       # RunPod Serverless Handler
+│   └── start.sh         # Start-Script für RunPod
 └── README.md
 ```
 
@@ -310,6 +317,14 @@ RERANKER_MODEL=cross-encoder/stsb-roberta-base docker-compose up
 Die API kann auch auf RunPod mit GPU-Unterstützung bereitgestellt werden für deutlich bessere Performance.
 
 Siehe [RUNPOD_DEPLOYMENT.md](RUNPOD_DEPLOYMENT.md) für eine detaillierte Anleitung.
+
+### RunPod Hub
+
+Die API ist für RunPod Hub vorbereitet mit:
+- ✅ `.runpod/hub.json` - Hub-Konfiguration mit Presets
+- ✅ `.runpod/tests.json` - Test-Konfiguration
+- ✅ `.runpod/handler.py` - Serverless Handler
+- ✅ `Dockerfile.runpod` - GPU-optimiertes Dockerfile
 
 ### Schnellstart RunPod
 
@@ -320,7 +335,8 @@ docker build -f Dockerfile.runpod -t your-username/ai-local-reranker:latest .
 # 2. Zu Docker Hub pushen
 docker push your-username/ai-local-reranker:latest
 
-# 3. RunPod Template erstellen (siehe RUNPOD_DEPLOYMENT.md)
+# 3. RunPod Hub Template erstellen (siehe RUNPOD_DEPLOYMENT.md)
+# Oder verwenden Sie die .runpod/hub.json Konfiguration
 ```
 
 **Vorteile von RunPod:**
@@ -328,6 +344,7 @@ docker push your-username/ai-local-reranker:latest
 - 💰 **Pay-per-use** - Nur zahlen, wenn aktiv
 - 🔄 **Auto-Scaling** - Automatische Skalierung bei Last
 - 🚀 **Schnelle Deployment** - In Minuten live
+- 🏪 **RunPod Hub** - Einfache Veröffentlichung und Nutzung
 
 ## Lizenz
 
